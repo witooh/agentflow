@@ -32,7 +32,7 @@
 
 ### B. Supabase backend หลัก
 - [x] **T-SUPA-01** สร้างโปรเจกต์ Supabase และเปิดใช้งาน pgvector
-- [ ] **T-SUPA-02** สร้างตารางและดัชนีหลัก `projects`, `requirements`, `artifacts`, `tasks`, `task_dependencies`, `agent_runs`, `messages`, `memories`, `project_members`
+ - [x] **T-SUPA-02** สร้างตารางและดัชนีหลัก `projects`, `requirements`, `artifacts`, `tasks`, `task_dependencies`, `agent_runs`, `messages`, `memories`, `project_members`
 - [ ] **T-SUPA-03** เขียน RLS policies สำหรับ projects และ tasks รวมถึงตารางที่เกี่ยวข้อง
 - [ ] **T-SUPA-04** ตั้ง Storage bucket ชื่อ `artifacts` และโครงพาธ `artifacts/<projectId>/...`
 - [ ] **T-SUPA-05** ตั้งค่า `.env` ใส่ `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
