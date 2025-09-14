@@ -42,3 +42,15 @@ npm install
 
 # Run development server
 npm run dev
+
+---
+
+## 📄 License
+
+This project is provided under a Non-Commercial License (NCL-1.0).
+
+- Allowed: use, copy, modify, and share for non-commercial purposes.
+- Not allowed: any commercial use without a separate commercial license.
+- See `LICENSE` for the full terms.
+
+For commercial licensing, please contact the maintainers.
