@@ -7,7 +7,7 @@
   "scripts": {
     "lint": "echo 'No root lint yet'",
     "build": "echo 'Build at workspace level'",
-    "dev": "echo 'Use workspace-specific dev scripts'",
+    "dev": "npm --prefix apps/web run dev",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r typecheck && pnpm -r test",
     "prepare": "husky install",
