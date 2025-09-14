@@ -15,16 +15,16 @@
 
 ```mermaid
 C4Context
-title AI Software House (TS-first)
+title AI Software House TS-first
 
 Person(User, "Human PM/Owner")
-System_Boundary(WebApp, "Next.js (TS)") {
+System_Boundary(WebApp, "Next.js TS") {
   Container(UI, "Web UI", "Next.js + shadcn/ui", "Chat/Tasks/Artifacts")
   Container(API, "API/Orchestrator", "Next.js Route Handlers + LangGraph", "Agent graph, events")
   ContainerDb(DB, "Postgres + pgvector", "RDS/Supabase", "Projects/Tasks/Artifacts/Memories")
   Container(Realtime, "WS/Realtime", "Socket.IO", "Live updates")
 }
-System(MQ, "RabbitMQ (AMQP)", "Messaging")
+System(MQ, "RabbitMQ AMQP", "Messaging")
 System(Workers, "Polyglot Workers", "Python/FastAPI", "ML/OCR/PDF/etc.")
 User -> UI: idea & answers
 UI -> API: kickoff / commands
@@ -137,9 +137,9 @@ AMQP_URL=amqp://guest:guest@localhost:5672/
 ```mermaid
 sequenceDiagram
   participant UI
-  participant API as API (TS)
+  participant API as API TS
   participant MQ as RabbitMQ
-  participant PY as Worker (Python)
+  participant PY as Worker Python
   participant DB
 
   UI->>API: POST /api/projects

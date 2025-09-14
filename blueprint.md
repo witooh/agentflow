@@ -97,9 +97,9 @@ class JobEnvelope(BaseModel):
 ```mermaid
 sequenceDiagram
   participant UI
-  participant Orchestrator_TS as Orchestrator (TS)
+  participant Orchestrator_TS as Orchestrator TS
   participant MQ as RabbitMQ
-  participant Worker_PY as Worker (Python)
+  participant Worker_PY as Worker Python
   participant DB
 
   UI->>Orchestrator_TS: Create project / kickoff
