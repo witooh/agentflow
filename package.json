@@ -3,13 +3,16 @@
   "private": true,
   "description": "Monorepo for AI Software House agents and services",
   "license": "SEE LICENSE IN LICENSE",
-  "packageManager": "pnpm@9",
+  "packageManager": "pnpm@10.16.1",
   "scripts": {
     "lint": "echo 'No root lint yet'",
     "build": "echo 'Build at workspace level'",
-    "dev": "echo 'Use workspace-specific dev scripts'"
+    "dev": "echo 'Use workspace-specific dev scripts'",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r typecheck && pnpm -r test"
   },
   "devDependencies": {
-    "supabase": "^2.40.7"
+    "supabase": "^2.40.7",
+    "typescript": "^5.6.2"
   }
 }
