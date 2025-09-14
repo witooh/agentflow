@@ -32,8 +32,6 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const core = require('@actions/core');
-
             async function main() {
               const apiKey = process.env.OPENAI_API_KEY;
               if (!apiKey) {
