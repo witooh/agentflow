@@ -38,7 +38,7 @@
  - [x] **T-SUPA-05** ตั้งค่า `.env` ใส่ `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 
 ### C. Next.js Web UI และ Orchestrator TS
-- [ ] **T-WEB-01** สร้าง Next.js TypeScript พร้อม Tailwind, shadcn ui, Zustand
+- [x] **T-WEB-01** สร้าง Next.js TypeScript พร้อม Tailwind, shadcn ui, Zustand
 - [ ] **T-WEB-02** ต่อ Supabase client และ admin บน server side
 - [ ] **T-WEB-03** หน้า `new project` สำหรับ kickoff
 - [ ] **T-WEB-04** หน้า `project detail` พร้อมแท็บ Chat, SRS, Tasks Kanban, Agents, Artifacts, Activity
