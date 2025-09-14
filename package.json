@@ -8,5 +8,8 @@
     "lint": "echo 'No root lint yet'",
     "build": "echo 'Build at workspace level'",
     "dev": "echo 'Use workspace-specific dev scripts'"
+  },
+  "devDependencies": {
+    "supabase": "^2.40.7"
   }
 }
