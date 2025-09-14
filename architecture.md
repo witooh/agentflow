@@ -1,228 +1,121 @@
+# Architecture: Agentflow CLI (Spec-Driven, Hybrid-ready)
 
-# ARCHITECTURE.md — Go‑first CLI Design
+<problem>
+- ต้องการสถาปัตยกรรมที่เปลี่ยนไอเดีย → สเปกที่อ่านง่ายและเครื่องอ่านได้ โดยเก็บเฉพาะผลลัพธ์สำคัญ
+- รองรับหลายบทบาทเอเจนต์ โดยลดโอกาสชนกันของเอกสาร
+</problem>
 
-สถาปัตยกรรมนี้โฟกัสที่การสร้าง “เครื่องมือ CLI ด้วยภาษา Go (Golang)” โดยใช้โครงสร้างมาตรฐานของแอป CLI: Cobra สำหรับคำสั่ง/ซับคำสั่ง, Viper สำหรับคอนฟิก/ENV, โฟลเดอร์แบบ `cmd/<app>` + `internal/...` เพื่อให้ทดสอบและบำรุงรักษาง่าย และรองรับปลั๊กอิน/ส่วนขยายในอนาคตเมื่อจำเป็น
+<approach>
+- **Spec-Driven Development**: ใช้ SPEC.md เป็นแหล่งความจริงเดียว
+- **Minimal State**: ไม่เก็บ run history; เก็บเฉพาะ JSON และ Markdown+XML blocks
+- **Go CLI** สำหรับ UX/Config/Validation + (เลือกได้) **Hybrid Runtime** (LangGraph) ผ่าน HTTP/gRPC เมื่อโปรเจกต์ใหญ่
+</approach>
 
----
+<architecture>
+- Context:
+  - ผู้ใช้สั่งงานผ่าน `agentflow` (Go CLI)
+  - CLI อ่าน/เขียนไฟล์ใน `.agentflow/` และเรียกเอเจนต์เป็นรายบทบาท
+  - (ทางเลือก) เรียก Runtime ภายนอกเพื่อทำ retrieval/formatting/validation ขั้นสูง
+- Boundaries:
+  - เอเจนต์แต่ละบทบาทแก้เฉพาะบล็อก/ไฟล์ในความรับผิดชอบ
+  - จำกัดสิทธิ์การเขียนไฟล์ไว้เฉพาะ `.agentflow/` (และโฟลเดอร์อนุญาต)
+</architecture>
 
-## 1) High‑level Overview (CLI‑first)
+<components>
+- **Agentflow CLI (Go + Cobra/Viper)**: คำสั่ง `init/intake/plan/design/qa/devlead/devops/validate/export`
+- **Agents (Roles)**: intake, planner, architect, qa, devlead, devops (เติมสเปกตามบล็อก)
+- **(Optional) Agent Runtime (LangGraph)**: จัดการ retrieval-first, summarize, schema-validate เมื่อจำเป็น
+</components>
 
-- รูปแบบ: Single binary CLI ที่ติดตั้งได้ด้วย Homebrew/Scoop/ดาวน์โหลดไฟล์
-- Framework: Cobra (commands), Viper (config), Zap/Logrus (logging)
-- โครง: `cmd/agentflow/` (entrypoint) + `internal/...` (core/business), `pkg/...` (public libs ถ้ามี)
-- I/O: รับค่าจาก flags/ENV/ไฟล์, อ่าน/เขียนไฟล์, stdout/stderr, exit codes ชัดเจน
-- ส่วนเสริม: สนับสนุนปลั๊กอินแบบ exec (เช่น `agentflow-<plugin>`) หรือ gRPC หากจำเป็น
+<dataflow>
+1) Human เริ่มไอเดีย → `agentflow init` สร้าง SPEC.md และโครง `.agentflow/`
+2) เรียกเอเจนต์ตามบทบาท → เติมบล็อกใน SPEC.md และสร้างไฟล์เสริม (`tasks.json`, `openapi.json`, `datamodel.json`)
+3) `agentflow validate` ตรวจรูปแบบแท็ก + JSON schema
+4) `agentflow export` รวมเอกสารพร้อมส่งให้ทีมพัฒนา/AI coding agents
+</dataflow>
 
+<folder_structure>
+กติกาไฟล์ (สำคัญ)
+รูปแบบที่อนุญาตเท่านั้น:
+JSON — ใช้กับสิ่งที่ต้องแม่นตามสคีมา (เช่น tasks.json, openapi.json, datamodel.json)
+Markdown + XML blocks — เอกสารบรรยายที่มีแท็ก <problem>, <approach>, <architecture>, <acceptance>, …
+ห้ามมี runs/ หรือประวัติการรันย่อย — เก็บเฉพาะ “สิ่งที่พร้อมให้ dev/AI coding agents ใช้พัฒนา”
+ขอบเขตการเขียนของเอเจนต์: เฉพาะใน .agentflow/ (และโฟลเดอร์อนุญาตอื่น ๆ ตามนโยบายโปรเจกต์)
+โค้ดจริง อยู่ นอก .agentflow/ (เช่นใน src/)
+ใช้งานจริง: ให้ทุกบทบาทเติมเฉพาะบล็อก/ไฟล์ของตัวเองในชุดไฟล์ด้านบน แล้วให้ dev/AI tools (เช่น Cursor) อ่าน SPEC.md + JSON เสริม เพื่อ implement ได้ตรงตาม requirement.
+.agentflow/
+  SPEC.md                # สเปกศูนย์กลาง (Markdown + XML blocks)
+  requirements.md        # สรุปปัญหา/ขอบเขต/ความต้องการ (MD+XML)
+  architecture.md        # ภาพรวมสถาปัตย์/การตัดสินใจ (MD+XML)
+    
+  tasks.json             # รายการงาน + DoD/AC (JSON)        [optional]
+  openapi.json           # สคีมา API (OpenAPI) (JSON)        [optional]
+  datamodel.json         # ดาต้าโมเดล/สคีมา (JSON)          [optional]
+    
+  config/
+    agents.yaml          # แมปบทบาทเอเจนต์ ↔ บล็อกใน SPEC.md/ไฟล์ที่ดูแล
+    # (ไฟล์ตั้งค่าอื่น ๆ ที่จำเป็นเท่านั้น เช่น โมเดล/พารามิเตอร์)
+    
+  agents/                # (แยกเอาต์พุตต่อบทบาท—ถ้าต้องการ)
+    intake/
+      outputs/
+        requirements.md  # ผลลัพธ์ของ Intake (MD+XML)
+      state.json         # สถานะย่อยล่าสุดของบทบาท (JSON)  [optional]
+    planner/
+      outputs/
+        plan.md          # สรุปแผน (MD+XML)                  [optional]
+        tasks.json       # รายการงาน (JSON)
+    architect/
+      outputs/
+        adr-001.md       # ADR/Design Notes (MD+XML)
+        design-overview.md
+    qa/
+      outputs/
+        test-plan.md     # แผนทดสอบ + AC (MD+XML)
+    devlead/
+      outputs/
+        dev-breakdown.md # แผนลงมือ/ลำดับงาน (MD+XML)      [optional]
+        dev-breakdown.json                                   [optional]
+    devops/
+      outputs/
+        pipeline-plan.json                                   [optional]
+        release-strategy.md                                  [optional]
+</folder_structure>
 
+<apis>
+- ภายใน CLI:
+  - `agentflow init` สร้างโครง
+  - `agentflow plan` อัปเดต `<userstories>/<acceptance>` + `tasks.json`
+  - `agentflow design` เติม `<architecture>/<decisions>` + `architecture.md`
+  - `agentflow validate` ตรวจ XML blocks + JSON schema
+- ภายนอก (ถ้าใช้ Runtime):
+  - `POST /run/role { role, inputs:[fileRefs] }` → คืน `{ artifacts:[{path,kind}] }`
+</apis>
 
-```mermaid
-flowchart LR
-  User[User (Terminal)] --> CLI[agentflow (Go CLI)]
-  CLI --> FS[(Filesystem\n.agentflow)]
-  CLI -. optional .-> Plugin[External Plugin\n(exec/gRPC)]
-  Plugin -. writes .-> FS
-```
+<constraints>
+- ไม่มีระบบติดตามรอบการรันละเอียด
+- ต้องรักษาความสอดคล้องของ SPEC.md กับไฟล์เสริมทุกครั้งก่อน export
+- ควรใช้ retrieval-first เพื่อลดคอนเท็กซ์ของโมเดล
+</constraints>
 
----
+<decisions>
+- เลือก Markdown+XML blocks เป็น “สัญญาเอกสาร” กลาง
+- ใช้ JSON สำหรับส่วนที่ต้องแม่นยำ (tasks/API/datamodel)
+- เตรียมรองรับ Hybrid Runtime โดยไม่ต้องเปลี่ยนรูปแบบไฟล์
+</decisions>
 
-## 2) Components (CLI‑centric)
+<risks>
+- สเปกไม่ครบถ้วน → โค้ดอาจเบี่ยง
+- โปรเจกต์ใหญ่ → การค้นคืนอาจไม่แม่น
+</risks>
 
-- **cmd/agentflow**: entrypoint หลัก สร้าง root command และ subcommands เช่น `init`, `intake`, `srs`, `plan`, `run`
-- **internal/intake**: โมดูลถาม‑ตอบ requirement (interactive TUI/CLI) + export JSON/Markdown
-- **internal/srs**: แปลง requirement เป็น SRS/User Stories/AC
-- **internal/agents**: รัน workflow ของเอเจนต์แบบลำดับขั้น (intake → sa → architect → planner → dev/qa → review)
-- **internal/io**: จัดการไฟล์ในโฟลเดอร์ `./.agentflow/...` สำหรับโปรเจกต์
-- **internal/config**: อ่าน config จากไฟล์และ ENV ด้วย Viper
-- **optional/external**: ปลั๊กอินภายนอก (exec or gRPC) สำหรับงานหนัก/เฉพาะทาง
+<mitigations>
+- ใช้เทมเพลต SPEC ที่เข้ม: บังคับมี `<acceptance>`/DoD ต่อ task
+- ทำ chunking/retrieval-first และ (ถ้าจำเป็น) เพิ่ม index เบาบางต่อไฟล์ Markdown/JSON
+</mitigations>
 
----
-
-## 3) File-based Data Model (สรุป)
-
-- project manifest: `./.agentflow/project.json`
-- requirements: `./.agentflow/intake/requirements.json` + `summary.md`
-- SRS & stories: `./.agentflow/analysis/SRS.md`, `./.agentflow/analysis/stories.json`
-- planning: `./.agentflow/planning/tasks.json`, `plan.md`
-- run logs: `./.agentflow/runs/<ts-id>/{agent.json,logs.ndjson,artifacts/...}`
-- artifacts: `./.agentflow/artifacts/<artifact-id>/{meta.json,data.*}`
-- attachments: `./.agentflow/attachments/*`
-- configs: `./.agentflow/configs/cli.yaml`
-
-> หมายเหตุ: รูปแบบไฟล์ต้องเป็นเวอร์ชัน และ validate ได้ด้วย schema เพื่อให้ Agents ข้ามภาษาทำงานร่วมกันได้
-
----
-
-## 4) CLI Commands & Versioning
-
-- คำสั่งหลัก: `agentflow init`, `agentflow intake`, `agentflow srs`, `agentflow plan`, `agentflow run`
-- Versioning: แสดงเวอร์ชันด้วย `agentflow --version`; ฝังข้อมูล build (commit/date) ผ่าน `-ldflags`
-- Output: พิมพ์เป็น stdout (human/readable) และรองรับ `--json` เพื่อให้เครื่องอ่านได้
-- Conventions: exit code 0 = สำเร็จ, อื่น ๆ = ล้มเหลวพร้อมข้อความสั้น ๆ
-
----
-
-## 5) Messaging & Contracts
-
-- Exchange: `agent` (type: topic)  
-- Routing keys: `ml.*`, `doc.parse.*`, `qa.run.*`, `ops.*`  
-- Envelope (ดู AGENTS.md) — ต้อง **versioned** และตรวจ schema ทุกครั้ง  
-- ผลลัพธ์ publish กลับด้วย `*.done` + payload อ้างอิง `taskId`
-
----
-
-## 6) Security (CLI)
-
-- **Secrets**: อ่านจาก ENV/ไฟล์คอนฟิก (Viper) และหลีกเลี่ยงการพิมพ์ลง stdout/log โดยไม่จำเป็น
-- **Least privilege**: จำกัดสิทธิ์ไฟล์คอนฟิก (`0600`), แยกโทเคนตามบทบาท/สcope
-- **Network**: ตรวจสอบ TLS เมื่อเรียกบริการภายนอก, รองรับ proxy/corporate CA หากจำเป็น
-- **Supply chain**: ใช้ Go modules พร้อม `go.sum`; เปิดใช้ `-trimpath`; พิจารณา SLSA/Goreleaser provenance
-- **Prompt safety**: sanitize context, block untrusted exec/plugins โดยใส่ allowlist
-
----
-
-## 7) Observability (CLI)
-
-- Structured logs (Zap/Logrus) พร้อม fields เช่น `project`, `task`, `run`
-- Verbosity flags: `-v/--verbose`, `--trace` สำหรับ debug ขั้นสูง
-- Exit codes ชัดเจน + สรุปผลสั้นๆ ที่ stderr เมื่อผิดพลาด
-
----
-
-## 8) Performance & Scalability (CLI)
-
-- เริ่มต้นเร็ว (cold start < 200ms ถ้าเป็นไปได้), ประหยัดหน่วยความจำ
-- ประมวลผลไฟล์แบบ stream เมื่ออ่าน/เขียนข้อมูลขนาดใหญ่
-- รองรับ parallelism แบบ `--concurrency N` เมื่อเหมาะสม
-
----
-
-## 9) Distribution & Releases
-
-- Build ด้วย `go build`/Goreleaser สำหรับหลายแพลตฟอร์ม (darwin/linux/windows; amd64/arm64)
-- แจกจ่ายผ่าน Homebrew/Scoop/Archives; เซ็นไบนารีถ้าจำเป็น
-- ตัวอย่าง ENV ที่ CLI ใช้:
-```bash
-OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-5.0-thinking
-HTTP_PROXY=...
-NO_COLOR=1 # ปิดสีสำหรับ CI
-```
-
----
-
-## 10) Failure Modes & Resilience
-
-- Retry with DLQ (dead‑letter queue) ต่อ routing‑key สำคัญ  
-- Idempotency key สำหรับคำสั่งซ้ำ  
-- Circuit breaker สำหรับ calls ภายนอก  
-- Graceful shutdown (drain messages) ใน workers
-
----
-
-## 11) Mermaid Sequences (CLI)
-
-### Kickoff → Results
-```mermaid
-sequenceDiagram
-  participant User as User (Terminal)
-  participant CLI as agentflow (Go CLI)
-  participant Plugin as External Plugin (optional)
-  participant FS as Filesystem
-
-  User->>CLI: agentflow init
-  CLI->>FS: create ./.agentflow
-  User->>CLI: agentflow intake --interactive
-  CLI->>FS: write requirements.json
-  User->>CLI: agentflow srs --in requirements.json --out SRS.md
-  CLI->>FS: write SRS.md, stories.json
-  CLI->>Plugin: exec agentflow-ml (optional)
-  Plugin-->>CLI: outputs (JSON)
-  CLI->>FS: persist artifacts
-```
-
----
-
-## 12) Roadmap
-
-- GitHub PR auto‑create per agent  
-- Evaluation harness (self‑critique)  
-- Playwright/Vitest/k6 CI  
-- Knowledge base ต่อโปรเจกต์ (embeddings)  
-- Monte Carlo timeline estimator
-
----
-
-## 1.1 CLI Components (โครงสร้างโฟลเดอร์)
-- `cmd/agentflow/` — main และ root command (Cobra)
-- `internal/config/` — Viper config, default values, ENV binding
-- `internal/intake/` — โมดูล intake/interview (interactive/non-interactive)
-- `internal/srs/` — สร้าง SRS/User Stories/AC
-- `internal/io/` — จัดการไฟล์/โฟลเดอร์, JSON/Markdown helpers
-- `pkg/...` — ไลบรารีสาธารณะ (ถ้าต้องการให้ผู้อื่นใช้ซ้ำ)
-
----
-
-## 2.1 CLI Integration (ตัวอย่างโค้ด)
-
-**cmd/agentflow/main.go (Cobra root):**
-```go
-package main
-
-import (
-  "fmt"
-  "os"
-  "github.com/spf13/cobra"
-  "github.com/spf13/viper"
-)
-
-var rootCmd = &cobra.Command{
-  Use:   "agentflow",
-  Short: "AI software workflow CLI",
-}
-
-func init() {
-  cobra.OnInitialize(initConfig)
-  rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging")
-  viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-}
-
-func initConfig() {
-  viper.SetConfigName("config")
-  viper.SetConfigType("yaml")
-  viper.AddConfigPath("$HOME/.config/agentflow")
-  viper.AutomaticEnv()
-  _ = viper.ReadInConfig()
-}
-
-func main() {
-  if err := rootCmd.Execute(); err != nil {
-    fmt.Fprintln(os.Stderr, err)
-    os.Exit(1)
-  }
-}
-```
-
-**internal/intake/intake.go:**
-```go
-package intake
-
-type Question struct { Key, Ask string }
-
-type Result struct { Questions []Question; Decisions []string }
-
-func RunInteractive() (Result, error) { /* ... */ return Result{}, nil }
-```
-
-**เพิ่ม subcommand ตัวอย่าง:**
-```go
-var intakeCmd = &cobra.Command{
-  Use:   "intake",
-  Short: "Collect requirements interactively",
-  RunE: func(cmd *cobra.Command, args []string) error {
-    // call intake.RunInteractive()
-    return nil
-  },
-}
-
-func init() { rootCmd.AddCommand(intakeCmd) }
-```
+<nonfunctional>
+- DX ดี: ใช้ Git ธรรมดา, โครงไฟล์เรียบง่าย
+- Portable: ข้ามแพลตฟอร์มได้
+- Scalable: เพิ่ม Runtime ภายนอกเมื่อโปรเจกต์โต โดยไม่รื้อสัญญาไฟล์
+</nonfunctional>
