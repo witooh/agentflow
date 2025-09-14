@@ -4,8 +4,11 @@
  * Run with: npm run test:integration
  */
 
-import { supabase } from "../supabase";
-import { supabaseAdmin } from "../supabase-admin";
+// NOTE: Avoid importing Supabase clients at module load time.
+// Import lazily inside the integration describe so that the suite can
+// be skipped cleanly when RUN_INTEGRATION_TESTS !== "true".
+let supabase: any;
+let supabaseAdmin: any;
 
 // Skip integration tests if not explicitly enabled
 const shouldRunIntegrationTests = process.env.RUN_INTEGRATION_TESTS === "true";
@@ -15,7 +18,7 @@ const describeIntegration = shouldRunIntegrationTests
     : describe.skip;
 
 describeIntegration("Supabase Integration Tests", () => {
-    beforeAll(() => {
+    beforeAll(async () => {
         // Verify environment variables are set
         if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
             throw new Error(
@@ -35,6 +38,12 @@ describeIntegration("Supabase Integration Tests", () => {
                 "SUPABASE_SERVICE_ROLE_KEY is required for integration tests",
             );
         }
+
+        // Lazy import only after envs are validated
+        const clientMod = await import("../supabase");
+        supabase = clientMod.supabase;
+        const adminMod = await import("../supabase-admin");
+        supabaseAdmin = adminMod.supabaseAdmin;
     });
 
     describe("Client Connection", () => {

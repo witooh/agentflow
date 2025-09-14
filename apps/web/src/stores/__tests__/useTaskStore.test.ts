@@ -26,6 +26,8 @@ describe('useTaskStore', () => {
       priority: 'medium' as const,
       assignee: 'user1',
       projectId: 'project1',
+      estimateHour: 1,
+      dependsOn: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -49,6 +51,8 @@ describe('useTaskStore', () => {
       priority: 'medium' as const,
       assignee: 'user1',
       projectId: 'project1',
+      estimateHour: 1,
+      dependsOn: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -72,6 +76,8 @@ describe('useTaskStore', () => {
       priority: 'medium' as const,
       assignee: 'user1',
       projectId: 'project1',
+      estimateHour: 1,
+      dependsOn: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -98,6 +104,8 @@ describe('useTaskStore', () => {
       priority: 'medium' as const,
       assignee: 'user1',
       projectId: 'project1',
+      estimateHour: 1,
+      dependsOn: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -127,6 +135,8 @@ describe('useTaskStore', () => {
         priority: 'medium' as const,
         assignee: 'user1',
         projectId: 'project1',
+        estimateHour: 1,
+        dependsOn: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
@@ -138,6 +148,8 @@ describe('useTaskStore', () => {
         priority: 'high' as const,
         assignee: 'user2',
         projectId: 'project1',
+        estimateHour: 2,
+        dependsOn: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
