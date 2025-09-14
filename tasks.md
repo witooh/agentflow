@@ -53,7 +53,7 @@ Supabase เป็น backend หลัก ใช้เป็น To-Do, อ้�
 
 - [x] **T-WEB-01** สร้าง Next.js TypeScript พร้อม Tailwind, shadcn ui, Zustand
 - [x] **T-WEB-02** ต่อ Supabase client และ admin บน server side
-- [ ] **T-WEB-03** หน้า `new project` สำหรับ kickoff
+- [x] **T-WEB-03** หน้า `new project` สำหรับ kickoff
 - [x] **T-WEB-04** หน้า `project detail` พร้อมแท็บ Chat, SRS, Tasks Kanban, Agents,
       Artifacts, Activity
 - [ ] **T-WEB-05** Realtime subscribe ตาราง `tasks`, `agent_runs`, `messages`

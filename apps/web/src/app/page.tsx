@@ -90,9 +90,14 @@ export default function Home() {
                   ))}
                 </div>
               )}
-              <Button onClick={handleAddSampleProject} className="w-full">
-                Add Sample Project
-              </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button asChild variant="default">
+                  <Link href="/projects/new">New Project</Link>
+                </Button>
+                <Button onClick={handleAddSampleProject} variant="secondary">
+                  Add Sample Project
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
