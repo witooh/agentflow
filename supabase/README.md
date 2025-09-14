@@ -9,6 +9,13 @@ Prerequisites
 - Supabase CLI installed: https://supabase.com/docs/guides/cli
 - Docker running (for local dev via `supabase start`).
 
+Environment keys (.env)
+- Copy `.env.example` to `.env` at repo root.
+- Fill the following from Supabase Dashboard → Project Settings → API:
+  - `SUPABASE_URL`
+  - `SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY` (server-only; never expose to browser)
+
 Local development (Docker)
 1) Start stack
    - `supabase start`
@@ -24,4 +31,3 @@ Hosted project (apply migrations)
 Notes
 - The migration is idempotent (`create extension if not exists vector;`).
 - Keep future schema changes as new numbered files under `supabase/migrations/`.
-
