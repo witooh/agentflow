@@ -26,7 +26,7 @@
 ## เช็กลิสต์ตามหมวด
 
 ### A. Bootstrap and Repo
-- [ ] **T-BOOT-01** Init monorepo ด้วย pnpm workspaces และโครง `apps web`, `packages types`, `services python-ml`
+- [x] **T-BOOT-01** Init monorepo ด้วย pnpm workspaces และโครง `apps web`, `packages types`, `services python-ml`
 - [ ] **T-BOOT-02** ตั้งค่าไฟล์มาตรฐาน `.editorconfig`, `.nvmrc`, `.gitignore`, `CODEOWNERS`, `SECURITY.md`
 - [ ] **T-BOOT-03** ใบอนุญาตแบบไม่เชิงพาณิชย์ ใส่ `LICENSE` และ README ชัดเจน
 
