@@ -1,0 +1,13 @@
+{
+  "name": "agentflow",
+  "private": true,
+  "description": "Monorepo for AI Software House agents and services",
+  "license": "MIT",
+  "packageManager": "pnpm@9",
+  "scripts": {
+    "lint": "echo 'No root lint yet'",
+    "build": "echo 'Build at workspace level'",
+    "dev": "echo 'Use workspace-specific dev scripts'"
+  }
+}
+

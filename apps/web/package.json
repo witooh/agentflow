@@ -1,0 +1,10 @@
+{
+  "name": "@agentflow/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'Scaffold Next.js in T-WEB-01'",
+    "build": "echo 'Scaffold Next.js in T-WEB-01'"
+  }
+}
+
