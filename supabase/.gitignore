@@ -1,8 +1,0 @@
-# Supabase local-only files and folders
-.temp/
-.branches/
-.shadow/
-
-# Do NOT commit signing keys
-signing_keys.json
-
