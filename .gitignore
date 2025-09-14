@@ -1,0 +1,57 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.eslintcache
+
+# Build output
+dist/
+build/
+out/
+.next/
+.turbo/
+.vercel/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# IDE/editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+.venv/
+venv/
+env/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.pytype/
+*.egg-info/
+htmlcov/
+.coverage*
+
+# Supabase local artifacts
+supabase/.temp/
+supabase/.branches/
+supabase/.shadow/
+
