@@ -2,7 +2,8 @@
 
 ## Overview
 
-This project uses Jest with React Testing Library for comprehensive unit testing. All tests must pass before any commit is allowed.
+This project uses Jest with React Testing Library for comprehensive unit
+testing. All tests must pass before any commit is allowed.
 
 ## Test Framework
 
@@ -96,7 +97,7 @@ describe('Button', () => {
 ### Store Tests
 
 ```tsx
-import { renderHook, act } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { useProjectStore } from '../useProjectStore';
 
 describe('useProjectStore', () => {
@@ -154,14 +155,18 @@ describe('utils', () => {
 
 ## Best Practices
 
-1. **Test Behavior, Not Implementation**: Focus on what the component does, not how it does it
-2. **Use Semantic Queries**: Prefer `getByRole`, `getByLabelText` over `getByTestId`
+1. **Test Behavior, Not Implementation**: Focus on what the component does, not
+   how it does it
+2. **Use Semantic Queries**: Prefer `getByRole`, `getByLabelText` over
+   `getByTestId`
 3. **Test User Interactions**: Use `userEvent` for realistic user interactions
 4. **Reset State**: Always reset store state in `beforeEach` for store tests
-5. **Mock External Dependencies**: Mock API calls, external libraries, and Next.js features
+5. **Mock External Dependencies**: Mock API calls, external libraries, and
+   Next.js features
 6. **Write Descriptive Test Names**: Use clear, descriptive test descriptions
 7. **Keep Tests Simple**: One assertion per test when possible
-8. **Test Edge Cases**: Include tests for error states, empty states, and edge cases
+8. **Test Edge Cases**: Include tests for error states, empty states, and edge
+   cases
 
 ## Debugging Tests
 
@@ -192,6 +197,7 @@ The pre-commit hooks ensure that:
 - Code follows linting rules
 - Code is properly formatted
 
-This guarantees code quality and prevents broken code from being committed to the repository.
+This guarantees code quality and prevents broken code from being committed to
+the repository.
 
 # Test commit
