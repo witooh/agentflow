@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -72,18 +73,20 @@ export default function Home() {
               ) : (
                 <div className="space-y-2">
                   {projects.map((project) => (
-                    <div
+                    <Link
                       key={project.id}
-                      className="p-3 border rounded-lg bg-slate-50 dark:bg-slate-800"
+                      href={`/projects/${project.id}`}
+                      className="block p-3 border rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
                     >
                       <h3 className="font-medium">{project.name}</h3>
                       <p className="text-sm text-slate-600 dark:text-slate-400">
                         {project.description}
                       </p>
-                      <Badge variant="outline" className="mt-2">
-                        {project.status}
-                      </Badge>
-                    </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant="outline">{project.status}</Badge>
+                        <Badge variant="secondary">Open</Badge>
+                      </div>
+                    </Link>
                   ))}
                 </div>
               )}
