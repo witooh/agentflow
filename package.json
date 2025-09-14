@@ -9,10 +9,28 @@
     "build": "echo 'Build at workspace level'",
     "dev": "echo 'Use workspace-specific dev scripts'",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r typecheck && pnpm -r test"
+    "test": "pnpm -r typecheck && pnpm -r test",
+    "prepare": "husky install",
+    "pre-commit": "lint-staged"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3",
     "supabase": "^2.40.7",
     "typescript": "^5.6.2"
+  },
+  "lint-staged": {
+    "apps/web/**/*.{ts,tsx,js,jsx}": [
+      "cd apps/web && pnpm typecheck",
+      "cd apps/web && pnpm test --passWithNoTests",
+      "cd apps/web && pnpm lint --fix"
+    ],
+    "packages/types/**/*.{ts,tsx,js,jsx}": [
+      "cd packages/types && pnpm typecheck"
+    ],
+    "*.{md,json,yml,yaml}": [
+      "prettier --write"
+    ]
   }
 }

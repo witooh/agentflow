@@ -26,6 +26,7 @@ interface ProjectActions {
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   clearError: () => void
+  reset: () => void
 }
 
 export const useProjectStore = create<ProjectState & ProjectActions>()(
@@ -65,6 +66,13 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
       setError: (error) => set({ error }),
       
       clearError: () => set({ error: null }),
+      
+      reset: () => set({
+        projects: [],
+        currentProject: null,
+        isLoading: false,
+        error: null
+      }),
     }),
     {
       name: 'project-store',

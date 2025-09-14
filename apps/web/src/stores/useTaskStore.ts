@@ -40,6 +40,8 @@ interface TaskActions {
   setFilters: (filters: Partial<TaskState['filters']>) => void
   clearFilters: () => void
   getFilteredTasks: () => Task[]
+  getTasksByStatus: (status: Task['status']) => Task[]
+  reset: () => void
 }
 
 export const useTaskStore = create<TaskState & TaskActions>()(
@@ -97,6 +99,19 @@ export const useTaskStore = create<TaskState & TaskActions>()(
           return true
         })
       },
+
+      getTasksByStatus: (status) => {
+        const { tasks } = get()
+        return tasks.filter(task => task.status === status)
+      },
+
+      reset: () => set({
+        tasks: [],
+        currentTask: null,
+        isLoading: false,
+        error: null,
+        filters: {}
+      }),
     }),
     {
       name: 'task-store',
