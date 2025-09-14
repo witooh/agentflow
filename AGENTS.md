@@ -236,3 +236,42 @@ flowchart LR
   I --> J
   J --> K[Delivery]
 ```
+
+
+---
+
+## Supabase‑first Conventions
+
+- **Auth**: ใช้ Supabase Auth เป็นแหล่งความจริงเรื่องผู้ใช้/ทีม/สิทธิ์
+- **Storage**: บันทึกเอกสาร/รายงาน/โค้ดแนบใน bucket `artifacts/` โดยจัดภายใต้ `artifacts/<projectId>/...`
+- **DB**: เขียน/อ่านผ่าน Supabase client (หรือ RPC) โดยเคารพ RLS เสมอ
+- **Realtime**: UI subscribe ตารางหลัก (`tasks`, `agent_runs`, `messages`) เพื่ออัปเดตสด
+- **Edge Functions**: งาน server-side สั้น ๆ (เช่น สร้าง PDF, ส่ง Webhook) ใช้ Edge Functions แทนการดึงเข้า Orchestrator ถ้าใกล้กับ DB/Storage
+- **RabbitMQ**: ใช้เฉพาะงานข้ามภาษา/หนักด้าน ML; ผลลัพธ์ต้องกลับมา persist ที่ Supabase
+
+### โค้ดตัวอย่าง: บันทึกผลลัพธ์ของ Agent ไปยัง Supabase
+
+```ts
+import { supabaseAdmin } from '@/src/lib/supabase';
+
+export async function persistAgentRun(run) {
+  const { data, error } = await supabaseAdmin
+    .from('agent_runs')
+    .insert({
+      project_id: run.projectId,
+      agent: run.agent,
+      input: run.input,
+      output: run.output,
+      status: run.status
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+```
+
+### Storage Path มาตรฐาน
+- `artifacts/<projectId>/SRS.md`
+- `artifacts/<projectId>/ARCHITECTURE.md`
+- `artifacts/<projectId>/tests/report-<runId>.json`

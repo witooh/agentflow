@@ -5,7 +5,13 @@
 
 ---
 
-## 1) High‑level Overview
+## 1) High‑level Overview (Supabase‑first)
+
+- **Backend หลัก: Supabase** (Postgres + Auth + Storage + Realtime + Edge Functions)
+- Next.js ทำหน้าที่เป็น Web UI + Orchestrator (TS) ที่ประสานงาน agents และคิวงาน
+- สำหรับงานข้ามภาษา/ML‑heavy ให้ใช้ RabbitMQ เป็นตัวกลาง
+
+
 
 ```mermaid
 C4Context
@@ -30,11 +36,11 @@ API -> Realtime: push events
 
 ---
 
-## 2) Components
+## 2) Components (Supabase‑centric)
 
 - **UI (Next.js)**: หน้า `/new-project`, `/project/[id]` (Chat, SRS, Tasks Kanban, Agents, Artifacts, Activity)
 - **API/Orchestrator (TS)**: LangGraph state machine (intake → sa → architect → planner → dev/qa → review)
-- **DB (Postgres + pgvector)**: ตาราง projects, requirements, artifacts, tasks, task_dependencies, agent_runs, messages, memories
+- **Supabase (Auth + Postgres + pgvector + Storage + Realtime + Edge Functions)**: ฐานข้อมูล/การยืนยันตัวตน/ไฟล์/สตรีมเหตุการณ์
 - **Messaging (RabbitMQ)**: cross‑language jobs/results
 - **Workers (Python)**: งาน OCR/ML/PDF‑heavy
 - **Realtime (Socket.IO/Supabase Realtime)**: สตรีมสถานะงาน/เอเจนต์
@@ -103,13 +109,14 @@ API -> Realtime: push events
 - **Workers**: Docker on Fargate/Cloud Run/K8s  
 - **Secrets**: Manager ของ cloud ที่ใช้
 
-**.env ตัวอย่าง**
+**.env ตัวอย่าง (Supabase‑first)**
 ```bash
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.0-thinking
 DATABASE_URL=postgres://...
 SUPABASE_URL=...
 SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 AMQP_URL=amqp://guest:guest@localhost:5672/
 ```
 
@@ -153,3 +160,85 @@ sequenceDiagram
 - Playwright/Vitest/k6 CI  
 - Knowledge base ต่อโปรเจกต์ (embeddings)  
 - Monte Carlo timeline estimator
+
+---
+
+## 1.1 Supabase Components (บทบาท)
+- **Auth**: จัดการผู้ใช้/Session/JWT (ใช้ RLS ผูก project_id)
+- **Postgres**: ข้อมูลทั้งหมด (projects, requirements, artifacts, tasks, agent_runs, messages, memories)
+- **pgvector**: เก็บ embedding สำหรับความจำโครงการ
+- **Storage**: เก็บ artifacts (เช่น SRS.md, test reports) ภายใต้โฟลเดอร์ `/artifacts/<projectId>/...`
+- **Realtime**: subscribe การเปลี่ยนแปลงของตาราง (เช่น `tasks`, `agent_runs`) เพื่ออัปเดต UI
+- **Edge Functions**: webhook / งานสั้น ๆ ที่ต้องรัน server-side ใกล้ DB (เช่น แปลงไฟล์, ส่งอีเมลแจ้งเตือน)
+
+
+---
+
+## 2.1 Supabase Integration (ตัวอย่างโค้ด)
+
+**Client (Next.js):**
+```ts
+import { createClient } from '@supabase/supabase-js';
+
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+```
+
+**Server (Next.js Route Handler) – ใช้ Service Role ใน server-only env:**
+```ts
+import { createClient } from '@supabase/supabase-js';
+
+export const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false } }
+);
+```
+
+**Realtime subscribe ตัวอย่าง:**
+```ts
+const channel = supabase.channel('tasks-stream')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` }, payload => {
+    // update UI
+  })
+  .subscribe();
+```
+
+**Storage (อัปโหลด artifact):**
+```ts
+await supabase.storage
+  .from('artifacts')
+  .upload(`artifacts/${projectId}/SRS_v1.md`, fileBlob, { upsert: true });
+```
+
+---
+
+## 6.1 RLS (Row-Level Security) Policies (ตัวอย่าง)
+
+```sql
+-- เปิด RLS
+alter table projects enable row level security;
+
+-- ตัวอย่างนโยบาย: ให้เจ้าของโปรเจกต์อ่าน/เขียนได้
+create policy project_owner_rw on projects
+  for all
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+-- tasks: ให้สมาชิกทีมที่ถูกเชิญในตาราง project_members เข้าได้
+create table project_members (
+  project_id uuid references projects(id) on delete cascade,
+  user_id uuid not null,
+  role text check (role in ('owner','admin','member')) default 'member',
+  primary key (project_id, user_id)
+);
+
+alter table tasks enable row level security;
+
+create policy tasks_team_rw on tasks
+  for all
+  using (exists (select 1 from project_members m where m.project_id = tasks.project_id and m.user_id = auth.uid()))
+  with check (exists (select 1 from project_members m where m.project_id = tasks.project_id and m.user_id = auth.uid()));
+```

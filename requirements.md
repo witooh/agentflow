@@ -146,3 +146,10 @@ Then ระบบสร้าง task ใหม่ และแสดงใน�
 - Risks: vendor lock‑in (ผ่อนหนักด้วย abstraction), DB scale (อ่าน replica)
 - Stories: US‑01 Create, US‑02 Update, US‑03 Delete, US‑04 Filter/Search
 - AC: ดูตัวอย่างด้านบน
+
+
+---
+
+## หมายเหตุสำหรับ Supabase
+- โปรดออกแบบ **Scope/NFR** โดยคำนึงถึง **RLS** และ **Storage policy** ตั้งแต่แรก
+- หากมีข้อมูลอ่อนไหว ให้ระบุ **data classification** และ **retention** เพื่อแปลงเป็น policy SQL ได้ทันที
