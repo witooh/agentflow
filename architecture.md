@@ -14,24 +14,25 @@
 
 
 ```mermaid
-C4Context
-title AI Software House TS-first
+flowchart LR
+  User[Human PM/Owner]
+  subgraph WebApp[Next.js TS]
+    UI[Web UI<br/>Next.js + shadcn/ui]
+    API[API / Orchestrator<br/>Next.js Route Handlers + LangGraph]
+    Realtime[Realtime<br/>Socket.IO or Supabase Realtime]
+  end
+  Supabase[(Supabase<br/>Auth + Postgres + pgvector + Storage + Edge Functions)]
+  MQ[RabbitMQ AMQP]
+  Workers[Polyglot Workers<br/>Python / FastAPI]
 
-Person(User, "Human PM/Owner")
-System_Boundary(WebApp, "Next.js TS") {
-  Container(UI, "Web UI", "Next.js + shadcn/ui", "Chat/Tasks/Artifacts")
-  Container(API, "API/Orchestrator", "Next.js Route Handlers + LangGraph", "Agent graph, events")
-  ContainerDb(DB, "Postgres + pgvector", "RDS/Supabase", "Projects/Tasks/Artifacts/Memories")
-  Container(Realtime, "WS/Realtime", "Socket.IO", "Live updates")
-}
-System(MQ, "RabbitMQ AMQP", "Messaging")
-System(Workers, "Polyglot Workers", "Python/FastAPI", "ML/OCR/PDF/etc.")
-User -> UI: idea & answers
-UI -> API: kickoff / commands
-API -> DB: persist state
-API -> MQ: publish jobs (topic)
-Workers -> MQ: results
-API -> Realtime: push events
+  User --> UI
+  UI --> API
+  API --> Supabase
+  API --> MQ
+  Workers --> MQ
+  MQ --> API
+  API --> Realtime
+  Realtime --> UI
 ```
 
 ---
