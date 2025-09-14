@@ -1,9 +1,8 @@
-# AGENTS.md — Multi‑Agent Roles & Contracts (TS‑first)
+# AGENTS.md — Multi‑Agent Roles & Contracts (Go‑first CLI)
 
 เอกสารฉบับนี้กำหนด **บทบาท (Roles)**, **สัญญา (Contracts)**, **พรอมพ์ (Prompts)**,
 **มาตรฐานคุณภาพ**, และ **ระเบียบปฏิบัติ (SOP)** สำหรับเอเจนต์ทั้งหมดในระบบ “AI Software
-House” โดยมีศูนย์กลางที่ **TypeScript** และรองรับ **Polyglot** ผ่าน RabbitMQ (AMQP)
-เมื่อจำเป็น
+House” โดยมีศูนย์กลางที่ **Go CLI** และรองรับ **Polyglot** ผ่านปลั๊กอิน exec/gRPC หรือคิวข้อความเมื่อจำเป็น
 
 ---
 
@@ -13,10 +12,9 @@ House” โดยมีศูนย์กลางที่ **TypeScript** แ�
 | -------------------- | ----------------------------------------------------------- | --------------------------------- | --------------------------- |
 | Intake/PM            | เก็บ/ซักถาม requirement, จัดหมวด, สรุป Goal/Scope/Decisions | JSON Q&A, Summary Markdown        | ถามทีละประเด็น, ห้ามเดา     |
 | SA (System Analyst)  | สร้าง SRS, User Stories, Acceptance Criteria                | SRS.md, stories.json              | อิง IEEE‑830 (ย่อ)          |
-| Architect            | สถาปัตยกรรม, API outline, diagram                           | ARCHITECTURE.md, OpenAPI fragment | อธิบาย trade‑offs           |
+| Architect            | สถาปัตยกรรม, CLI commands outline, diagram                  | ARCHITECTURE.md, CLI spec fragment | อธิบาย trade‑offs           |
 | Planner/PM           | แตกงานเป็น WBS/Tasks + dependsOn + estimate                 | tasks.json                        | slice แบบ vertical          |
-| FE Dev               | โค้ดหน้าบ้าน/UI/UX, docs run/test                           | PR summary + artifacts            | TS/Next.js                  |
-| BE Dev               | API/DB, business logic, docs run/test                       | PR summary + artifacts            | TS/Next.js (Route Handlers) |
+| CLI Dev (Go)         | พัฒนา CLI commands/subcommands, config, I/O, docs run/test   | PR summary + artifacts            | Go (Cobra/Viper)            |
 | QA                   | Test Plan/Cases/Runs, รายงานผล                              | testplan.md, report.json          | Happy/Sad/Edge              |
 | DevOps               | Pipeline/Env/IaC, preview deployment                        | pipeline.md                       | ขั้นต่ำ: dev/staging/prod   |
 | Reviewer (Tech Lead) | Review code/docs, block/unblock, release notes              | review.md, release_notes.md       | ตีธง blockers ชัดเจน        |
@@ -280,42 +278,30 @@ flowchart LR
 
 ---
 
-## Supabase‑first Conventions
+## Filesystem‑first Conventions
 
-- **Auth**: ใช้ Supabase Auth เป็นแหล่งความจริงเรื่องผู้ใช้/ทีม/สิทธิ์
-- **Storage**: บันทึกเอกสาร/รายงาน/โค้ดแนบใน bucket `artifacts/` โดยจัดภายใต้
-  `artifacts/<projectId>/...`
-- **DB**: เขียน/อ่านผ่าน Supabase client (หรือ RPC) โดยเคารพ RLS เสมอ
-- **Realtime**: UI subscribe ตารางหลัก (`tasks`, `agent_runs`, `messages`)
-  เพื่ออัปเดตสด
-- **Edge Functions**: งาน server-side สั้น ๆ (เช่น สร้าง PDF, ส่ง Webhook) ใช้ Edge
-  Functions แทนการดึงเข้า Orchestrator ถ้าใกล้กับ DB/Storage
-- **RabbitMQ**: ใช้เฉพาะงานข้ามภาษา/หนักด้าน ML; ผลลัพธ์ต้องกลับมา persist ที่ Supabase
+- ไม่ใช้ฐานข้อมูล ข้อมูลทั้งหมดจัดเก็บในไฟล์ภายใน `./.agentflow/...` เพื่อให้เวอร์ชันด้วย Git ได้
+- เส้นทางมาตรฐานต่อโปรเจกต์: ดูรายละเอียดใน requirements.md/architecture.md (folder structure)
+- การรันของ Agent ต้องเขียน log/metadata เข้า `./.agentflow/runs/<ts-id>/`
+- ผลลัพธ์ที่เป็นชิ้นงานให้เก็บที่ `./.agentflow/artifacts/<artifact-id>/` พร้อม `meta.json`
+- ปลั๊กอิน/บริการภายนอก (ถ้ามี) ต้องอ่าน/เขียนไฟล์ตามสัญญาเดียวกัน
 
-### โค้ดตัวอย่าง: บันทึกผลลัพธ์ของ Agent ไปยัง Supabase
+### โค้ดตัวอย่าง: บันทึกผลลัพธ์ของ Agent ไปยังไฟล์ (TypeScript)
 
 ```ts
-import { supabaseAdmin } from '@/src/lib/supabase';
+import { promises as fs } from 'fs';
+import { join } from 'path';
 
-export async function persistAgentRun(run) {
-  const { data, error } = await supabaseAdmin
-    .from('agent_runs')
-    .insert({
-      project_id: run.projectId,
-      agent: run.agent,
-      input: run.input,
-      output: run.output,
-      status: run.status,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+export async function persistAgentRunFS(runId: string, run: any) {
+  const base = join(process.cwd(), '.agentflow', 'runs', runId);
+  await fs.mkdir(base, { recursive: true });
+  await fs.writeFile(join(base, 'agent.json'), JSON.stringify(run, null, 2), 'utf8');
 }
 ```
 
 ### Storage Path มาตรฐาน
 
-- `artifacts/<projectId>/SRS.md`
-- `artifacts/<projectId>/ARCHITECTURE.md`
-- `artifacts/<projectId>/tests/report-<runId>.json`
+- `.agentflow/analysis/SRS.md`
+- `.agentflow/ARCHITECTURE.md` (ถ้ามี)
+- `.agentflow/runs/<ts-id>/report.json`
+- `.agentflow/artifacts/<artifact-id>/data.*`

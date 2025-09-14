@@ -1,7 +1,7 @@
 
-# AI Software House — TS‑first Polyglot Multi‑Agent Blueprint (for ChatGPT Projects)
+# AI Software House — Go‑first CLI Multi‑Agent Blueprint (for ChatGPT Projects)
 
-> **วัตถุประสงค์**: เอกสารฉบับนี้เป็นพิมพ์เขียว Markdown สำหรับป้อนให้ ChatGPT/Agents ใช้เป็นแนวทางสร้าง Web App + ชุด AI Agents ที่จำลองการทำงานแบบ “บริษัทซอฟต์แวร์เฮาส์”: Human เสนอไอเดีย → Intake ซักถามเก็บ Requirement → SA สร้าง SRS → Architect ออกแบบ → Planner แตกงาน → Agents พัฒนา/ทดสอบ → Reviewer รวมผลส่งมอบ
+> **วัตถุประสงค์**: เอกสารฉบับนี้เป็นพิมพ์เขียว Markdown สำหรับป้อนให้ ChatGPT/Agents ใช้เป็นแนวทางสร้าง “เครื่องมือ CLI ด้วย Go” + ชุด AI Agents ที่จำลองการทำงานแบบ “บริษัทซอฟต์แวร์เฮาส์”: Human เสนอไอเดีย → Intake ซักถามเก็บ Requirement → SA สร้าง SRS → Architect ออกแบบ → Planner แตกงาน → Agents พัฒนา/ทดสอบ → Reviewer รวมผลส่งมอบ
 
 ---
 
@@ -27,29 +27,25 @@
 
 ---
 
-## สถาปัตยกรรม (TS‑first, รองรับ Polyglot เมื่อจำเป็น)
-- ศูนย์กลางระบบ: **TypeScript** (Next.js + LangGraph + OpenAI GPT‑5 Thinking)
-- งานที่ TS ไม่ถนัด (OCR/ML/PDF-heavy/Scientific) → แยกเป็น **Microservice ภาษาอื่น** (เช่น **Python**) สื่อสารผ่าน **RabbitMQ (AMQP)** หรือ HTTP tool เท่านั้น
+## สถาปัตยกรรม (Go‑first CLI, รองรับ Polyglot เมื่อจำเป็น)
+- ศูนย์กลางระบบ: **Go CLI** (Cobra + Viper + OpenAI SDK/HTTP)
+- งานที่ต้องการ ML/ภาษาที่สะดวกกว่า → แยกเป็น **ปลั๊กอินภายนอก** (exec/gRPC) หรือบริการ HTTP
 
 ### Stack
-- **Frontend**: Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + Zustand + socket.io-client  
-- **Orchestrator/Agents (หลัก)**: TypeScript + LangGraph + OpenAI GPT‑5 Thinking  
-- **Backend API (หลัก)**: Next.js Route Handlers / tRPC (TS)  
-- **Messaging/Queue (ข้ามภาษา)**: **RabbitMQ (AMQP)** — Node ใช้ `amqplib`, Python ใช้ `pika`  
-- **DB**: Postgres + pgvector (Supabase/RDS)  
-- **Storage (หลัก)**: Supabase Storage (bucket: artifacts)  
-- **Realtime (หลัก)**: Supabase Realtime (fallback: Socket.IO)  
-- **Auth**: Supabase Auth หรือ NextAuth (TS)  
-- **Observability**: OpenTelemetry + pino/Logflare/Better Stack  
-- **CI/CD**: Vercel (FE+Edge/API) + GitHub Actions + Supabase migrations  
-- **Polyglot Services**: Python (FastAPI + Pydantic) สำหรับ ML/OCR/PDF/data
+- **CLI Framework**: Cobra (commands/subcommands), Viper (config/ENV)
+- **Agents/Workflow**: รันภายใน CLI (Go) หรือเรียกปลั๊กอินภายนอกเมื่อจำเป็น
+- **Storage (ไฟล์)**: จัดเก็บข้อมูลทั้งหมดภายในโฟลเดอร์ซ่อน `./.agentflow/...` ของโปรเจกต์
+- **Messaging (ถ้าจำเป็น)**: ใช้ exec plugin หรือ gRPC/HTTP แทน MQ เพื่อลดความซับซ้อน
+- **Observability**: Zap/Logrus + structured logs
+- **CI/CD**: GoReleaser + GitHub Actions (release archives/Homebrew/Scoop)
+- **Polyglot Services (optional)**: Python/others สำหรับ ML/OCR/PDF/data ผ่าน CLI plugin หรือ HTTP
 
-### นโยบายภาษา (TS‑first Polyglot)
-1) Orchestrator, API, Web UI = **TypeScript** ทั้งหมด  
-2) งาน non‑TS friendly → แยก **Python microservice** หลัง AMQP/HTTP (ห้าม embed Python ใน Node)  
-3) สัญญาข้ามภาษา: **JSON Schema/TypeBox** เป็นแหล่งความจริง → gen type สำหรับ TS และ Pydantic model สำหรับ Python  
-4) ทุก message ในคิวห่อด้วย **Envelope (versioned)** และตรวจสอบได้  
-5) Worker ภายนอกต้อง **idempotent** และ **auditable** (log + artifact + checksum)
+### นโยบายภาษา (Go‑first)
+1) Core CLI = **Go** ทั้งหมด  
+2) งาน non‑Go friendly → แยกเป็น **ปลั๊กอิน** (exec/gRPC) หรือบริการ HTTP ภายนอก  
+3) สัญญาข้ามภาษา: **JSON Schema** เป็นแหล่งความจริง; map เป็น struct Go และ model ภาษาอื่น  
+4) ข้อมูลขาออกต้อง **versioned** และตรวจ schema ได้  
+5) ปลั๊กอินภายนอกต้อง **idempotent** และ **auditable** (log + artifact + checksum)
 
 ### Message Envelope (สัญญากลาง)
 ```ts
@@ -96,112 +92,63 @@ class JobEnvelope(BaseModel):
 
 ```mermaid
 sequenceDiagram
-  participant UI
-  participant Orchestrator_TS as Orchestrator TS
-  participant MQ as RabbitMQ
-  participant Worker_PY as Worker Python
-  participant DB
+  participant User as User (Terminal)
+  participant CLI as agentflow (Go CLI)
+  participant FS as Filesystem
+  participant Plugin as External Plugin (optional)
 
-  UI->>Orchestrator_TS: Create project / kickoff
-  Orchestrator_TS->>MQ: publish job (ml.extract_keywords)
-  Worker_PY-->>MQ: subscribe agent.ml.*
-  Worker_PY->>Worker_PY: process & create artifact
-  Worker_PY->>MQ: publish result (ml.extract_keywords.done)
-  Orchestrator_TS->>DB: persist outputs
-  Orchestrator_TS-->>UI: realtime update via WS
+  User->>CLI: agentflow init
+  CLI->>FS: create ./.agentflow/project.json
+  User->>CLI: agentflow intake --interactive
+  CLI->>FS: write .agentflow/intake/requirements.json, .agentflow/intake/summary.md
+  User->>CLI: agentflow srs --in .agentflow/intake/requirements.json
+  CLI->>FS: write .agentflow/analysis/SRS.md, .agentflow/analysis/stories.json
+  CLI->>Plugin: exec agentflow-ml (optional)
+  Plugin-->>CLI: outputs (JSON/MD)
+  CLI->>FS: persist .agentflow/artifacts and .agentflow/runs/<ts-id>
 ```
 
 ---
 
-## แบบจำลองข้อมูล (Postgres + SQL)
-```sql
--- Projects & Requirements
-create table projects (
-  id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null,
-  name text not null,
-  goal text,
-  status text check (status in ('new','intake','design','planning','executing','qa','review','done','archived')) default 'new',
-  created_at timestamptz default now()
-);
-
-create table requirements (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade,
-  kind text check (kind in ('business','functional','nonfunctional','constraint','question','answer','decision')),
-  content jsonb not null,
-  created_by text not null, -- 'human' | 'agent:pm' | ...
-  created_at timestamptz default now()
-);
-
--- SRS & Design
-create table artifacts (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade,
-  type text check (type in ('srs','architecture','erd','api_spec','test_plan','release_notes','other')),
-  title text,
-  body markdown,
-  meta jsonb,
-  storage_url text,
-  version int default 1,
-  created_by text,
-  created_at timestamptz default now()
-);
-
--- Tasks & Dependencies
-create table tasks (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade,
-  title text not null,
-  description markdown,
-  role text check (role in ('pm','sa','architect','techlead','fe','be','qa','devops','writer')),
-  status text check (status in ('todo','in_progress','blocked','review','done')) default 'todo',
-  estimate_hour int,
-  priority int default 3,
-  owner text, -- agent id or human
-  outputs jsonb, -- links, code pointers, etc.
-  created_at timestamptz default now()
-);
-
-create table task_dependencies (
-  task_id uuid references tasks(id) on delete cascade,
-  depends_on uuid references tasks(id) on delete cascade,
-  primary key (task_id, depends_on)
-);
-
--- Agent Runs & Messages
-create table agent_runs (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade,
-  agent text,
-  input jsonb,
-  output jsonb,
-  status text,
-  started_at timestamptz default now(),
-  finished_at timestamptz
-);
-
-create table messages (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade,
-  sender text, -- human / agent:pm / agent:fe / ...
-  role text,   -- system/user/assistant/tool
-  content markdown,
-  meta jsonb,
-  created_at timestamptz default now()
-);
-
--- Memory (pgvector)
-create extension if not exists vector;
-create table memories (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade,
-  kind text check (kind in ('requirement','decision','risk','domain_knowledge','style')),
-  content text,
-  embedding vector(1536)
-);
-create index on memories using ivfflat (embedding vector_cosine_ops);
+## แบบจำลองข้อมูล (ไฟล์ระบบ)
 ```
+.agentflow/
+  project.json
+  intake/
+    requirements.json
+    summary.md
+  analysis/
+    SRS.md
+    stories.json
+  planning/
+    tasks.json
+    plan.md
+  runs/
+    YYYYMMDD-HHMMSS-<id>/
+      agent.json
+      logs.ndjson
+      artifacts/
+  artifacts/
+    <artifact-id>/{meta.json,data.*}
+  attachments/*
+  prompts/*
+  configs/cli.yaml
+  agents/
+    registry.json
+  schemas/
+  indexes/
+  cache/
+  tmp/
+```
+
+### สคีมาไฟล์หลัก (สรุป)
+- project.json: { name, slug, version, owners[], createdAt, description, conventionsVersion }
+- intake/requirements.json: { questions[], decisions[], scope{mvp[],out_of_scope[]} }
+- analysis/stories.json: { stories:[{id,title,ac[]}...] }
+- planning/tasks.json: { tasks:[{id,title,role,estimateHour,dependsOn[]}...] }
+- runs/<ts-id>/agent.json: { agent, input, output, status, startedAt, finishedAt, taskId? }
+
+> หมายเหตุ: เก็บทุกอย่างใน Git ได้; ยกเว้น cache/tmp/logs อาจใส่ .gitignore
 
 ---
 
@@ -348,94 +295,42 @@ export async function POST(req: NextRequest) {
 
 ---
 
-## Polyglot Workers (Python) — ตัวอย่างบริการเสริม
-**เมื่อ TS ไม่สะดวก ให้แยกเป็นบริการ Python** (FastAPI + Pydantic + pika) และสื่อสารผ่าน RabbitMQ หรือ HTTP Tool
+## Plugins/External Tools (Optional)
+- หากงานบางอย่างเหมาะกับภาษาอื่น (เช่น Python สำหรับ ML/OCR) ให้ใช้รูปแบบปลั๊กอินแบบ `exec` หรือ HTTP local service ชั่วคราว
+- อินพุต/เอาต์พุตผ่านไฟล์ในโปรเจกต์ (ไม่พึ่งฐานข้อมูล/คิวข้อความ)
+- ข้อตกลง: ปลั๊กอินรับไฟล์ JSON ตาม schema และเขียนผลลัพธ์ไปที่ `.agentflow/runs/<ts-id>/artifacts/` หรือ `.agentflow/artifacts/<artifact-id>` พร้อม `meta.json`
 
-```
-services/
-  python-ml/
-    schemas.py
-    worker.py
-    requirements.txt
-    Dockerfile
-```
-
-**Python Worker (pika)**
-```py
-import os, json, pika
-from schemas import JobEnvelope
-
-params = pika.URLParameters(os.environ.get('AMQP_URL'))
-conn = pika.BlockingConnection(params)
-ch = conn.channel()
-ch.exchange_declare(exchange='agent', exchange_type='topic', durable=True)
-
-result_q = ch.queue_declare(queue='worker-ml', durable=True)
-ch.queue_bind(exchange='agent', queue=result_q.method.queue, routing_key='ml.*')
-
-def on_msg(ch, method, properties, body):
-    job = JobEnvelope.model_validate_json(body)
-    # ... ทำงานจริง เช่น สกัดคีย์เวิร์ด ...
-    result = { 'taskId': job.taskId, 'keywords': ['foo','bar'] }
-    ch.basic_publish(exchange='agent', routing_key='ml.extract_keywords.done', body=json.dumps(result))
-    ch.basic_ack(method.delivery_tag)
-
-ch.basic_consume(queue=result_q.method.queue, on_message_callback=on_msg)
-ch.start_consuming()
+ตัวอย่างการเรียกปลั๊กอินแบบ exec จาก CLI (Go):
+```go
+cmd := exec.CommandContext(ctx, "agentflow-ml", "--in", inPath, "--out", outPath)
+cmd.Env = append(os.Environ(), "OPENAI_API_KEY="+apiKey)
+cmd.Stdout = os.Stdout
+cmd.Stderr = os.Stderr
+if err := cmd.Run(); err != nil { return err }
 ```
 
-**TS Publisher (amqplib)**
-```ts
-import amqp from 'amqplib';
-import { JobEnvelope, ExtractKeywordsPayload } from '@types/contracts';
-
-export async function publishExtractKeywords(job: JobEnvelope<ExtractKeywordsPayload>) {
-  const conn = await amqp.connect(process.env.AMQP_URL!);
-  const ch = await conn.createChannel();
-  await ch.assertExchange('agent', 'topic', { durable: true });
-  ch.publish('agent', 'ml.extract_keywords', Buffer.from(JSON.stringify(job)), { persistent: true });
-  await ch.close();
-  await conn.close();
+ตัวอย่างโครงผลลัพธ์ `meta.json`:
+```json
+{
+  "id": "art-20250915-001",
+  "type": "ml.extract_keywords",
+  "version": 1,
+  "createdAt": "2025-09-15T03:28:00+07:00",
+  "by": "plugin:agentflow-ml",
+  "sourceRun": "20250915-0328-abc123",
+  "schema": "https://example.com/schemas/keywords-1.json"
 }
 ```
 
-**Dockerfile (ตัวอย่าง)**
-```Dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY ./services/python-ml/requirements.txt ./
-RUN pip install -r requirements.txt
-COPY ./services/python-ml/ ./
-ENV AMQP_URL=${AMQP_URL}
-CMD ["python","worker.py"]
-```
-
-**docker-compose (บางส่วนสำหรับ dev)**
-```yaml
-services:
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports: ["5672:5672","15672:15672"]
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_PASSWORD: example
-    ports: ["5432:5432"]
-```
-
-> Production: แนะนำ CloudAMQP/Managed RabbitMQ และ DB ที่มี HA
-
 ---
 
-## UI/UX (Next.js)
-- **/new-project**: ฟอร์มชื่อ/เป้าหมาย + “Kickoff”  
-- **/project/[id]** แท็บ:
-  - **Chat**: เห็น Q&A กับ Intake/PM Agent realtime
-  - **SRS**: Preview Markdown + Promote เป็น Artifact
-  - **Tasks (Kanban)**: Todo/In‑Progress/Review/Done (drag‑and‑drop)
-  - **Agents**: สถานะ, งานคิว, เวลาโดยประมาณ
-  - **Artifacts**: SRS/Architecture/API/TestPlan/ReleaseNotes
-  - **Activity**: Event stream (started/planned/blocked/finished)
+## CLI UX
+- คำสั่งเริ่มต้น: `agentflow init` สร้างโฟลเดอร์ .agentflow และโครงภายในโปรเจกต์
+- เก็บความต้องการ: `agentflow intake --interactive` บันทึก `requirements.json`
+- สร้าง SRS: `agentflow srs --in requirements.json --out SRS.md`
+- แตกงาน/แผน: `agentflow plan --in SRS.md --out tasks.json`
+- รันเอเจนต์: `agentflow run --project <name> [--concurrency N]`
+- ช่วยเหลือ: `agentflow --help`, `agentflow <cmd> --help`
 
 ---
 
@@ -448,35 +343,32 @@ services:
 
 ---
 
-## .env ตัวอย่าง
+## .env ตัวอย่าง (CLI)
 ```bash
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.0-thinking
-DATABASE_URL=postgres://...
-SUPABASE_URL=...
-SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
-AMQP_URL=amqp://guest:guest@localhost:5672/
+HTTP_PROXY=...
+NO_COLOR=1
 ```
 
 ---
 
 ## ขั้นตอนตั้งค่า (Dev)
-1) `pnpm create next-app@latest ai-software-house --ts`  
-2) `pnpm add @langchain/langgraph zod openai amqplib @supabase/supabase-js socket.io socket.io-client`  
-   (เพิ่ม tRPC: `pnpm add @trpc/server @trpc/client @tanstack/react-query`)  
-3) ตั้งค่า Supabase + run SQL schema ข้างบน  
-4) เพิ่มไฟล์ `src/agents/*` และ Route Handlers ตามโครง  
-5) `pnpm dev` → เปิด `http://localhost:3000`
+1) ติดตั้ง Go 1.22+ และ `go env GOPATH` ให้พร้อมใช้งาน  
+2) สร้างโมดูล: `go mod init github.com/you/agentflow`  
+3) ติดตั้งไลบรารี: `go get github.com/spf13/cobra@latest github.com/spf13/viper@latest`  
+4) โครงสร้างโฟลเดอร์: `cmd/agentflow`, `internal/{intake,srs,io,config}`  
+5) รัน: `go run ./cmd/agentflow --help` และเพิ่ม subcommands ตามต้องการ  
+6) ออกรุ่น: ใช้ GoReleaser หรือ `go build -ldflags "-s -w -X main.version=$(git rev-parse --short HEAD)"`
 
 ---
 
 ## ตัวอย่างการใช้งาน (Idea → Delivery)
-**Idea:** “เว็บจดงาน (Todo) สำหรับทีม มีแชท และ export CSV”  
-- Intake/PM: ถาม roles, MVP scope, login, export, NFR (performance, PDPA)  
-- SA: สร้าง SRS + Stories (เช่น US‑01 สร้าง task, AC: กด Add แล้วเห็นใน 1s)  
-- Architect: Next.js + Postgres + RLS + SSR + REST API outline  
-- Planner: แตก ~12 tasks (FE/BE/Test/DevOps) พร้อม dependsOn  
+**Idea:** “เครื่องมือ CLI จดงาน (Todo) สำหรับทีม มีคำสั่งจัดการและ export CSV”  
+- Intake/PM: ถาม roles, MVP scope, คำสั่งหลัก, NFR (performance, PDPA)  
+- SA: สร้าง SRS + Stories (เช่น US‑01 สร้าง task, AC: สั่ง `todo add` แล้วเห็นผลทันที)  
+- Architect: Go CLI + โฟลเดอร์โปรเจกต์บนไฟล์ระบบ + สัญญา JSON สำหรับปลั๊กอิน  
+- Planner: แตก ~12 tasks (CLI/QA/DevOps) พร้อม dependsOn  
 - Agents: ผลิต skeleton + QA เคส + Reviewer สรุป Release Notes v0.1
 
 ---

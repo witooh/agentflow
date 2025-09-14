@@ -1,67 +1,63 @@
 
-# ARCHITECTURE.md — TS‑first System Design
+# ARCHITECTURE.md — Go‑first CLI Design
 
-สถาปัตยกรรมเน้น **TypeScript เป็นศูนย์กลาง** (Next.js + LangGraph + OpenAI) และรองรับ **Polyglot workers** (เช่น Python) ผ่าน **RabbitMQ (AMQP)** เพื่อแยกงานที่ TS ไม่ถนัด
+สถาปัตยกรรมนี้โฟกัสที่การสร้าง “เครื่องมือ CLI ด้วยภาษา Go (Golang)” โดยใช้โครงสร้างมาตรฐานของแอป CLI: Cobra สำหรับคำสั่ง/ซับคำสั่ง, Viper สำหรับคอนฟิก/ENV, โฟลเดอร์แบบ `cmd/<app>` + `internal/...` เพื่อให้ทดสอบและบำรุงรักษาง่าย และรองรับปลั๊กอิน/ส่วนขยายในอนาคตเมื่อจำเป็น
 
 ---
 
-## 1) High‑level Overview (Supabase‑first)
+## 1) High‑level Overview (CLI‑first)
 
-- **Backend หลัก: Supabase** (Postgres + Auth + Storage + Realtime + Edge Functions)
-- Next.js ทำหน้าที่เป็น Web UI + Orchestrator (TS) ที่ประสานงาน agents และคิวงาน
-- สำหรับงานข้ามภาษา/ML‑heavy ให้ใช้ RabbitMQ เป็นตัวกลาง
+- รูปแบบ: Single binary CLI ที่ติดตั้งได้ด้วย Homebrew/Scoop/ดาวน์โหลดไฟล์
+- Framework: Cobra (commands), Viper (config), Zap/Logrus (logging)
+- โครง: `cmd/agentflow/` (entrypoint) + `internal/...` (core/business), `pkg/...` (public libs ถ้ามี)
+- I/O: รับค่าจาก flags/ENV/ไฟล์, อ่าน/เขียนไฟล์, stdout/stderr, exit codes ชัดเจน
+- ส่วนเสริม: สนับสนุนปลั๊กอินแบบ exec (เช่น `agentflow-<plugin>`) หรือ gRPC หากจำเป็น
 
 
 
 ```mermaid
 flowchart LR
-  User[Human PM/Owner]
-  subgraph WebApp[Next.js TS]
-    UI[Web UI<br/>Next.js + shadcn/ui]
-    API[API / Orchestrator<br/>Next.js Route Handlers + LangGraph]
-    Realtime[Realtime<br/>Socket.IO or Supabase Realtime]
-  end
-  Supabase[(Supabase<br/>Auth + Postgres + pgvector + Storage + Edge Functions)]
-  MQ[RabbitMQ AMQP]
-  Workers[Polyglot Workers<br/>Python / FastAPI]
-
-  User --> UI
-  UI --> API
-  API --> Supabase
-  API --> MQ
-  Workers --> MQ
-  MQ --> API
-  API --> Realtime
-  Realtime --> UI
+  User[User (Terminal)] --> CLI[agentflow (Go CLI)]
+  CLI --> FS[(Filesystem\n.agentflow)]
+  CLI -. optional .-> Plugin[External Plugin\n(exec/gRPC)]
+  Plugin -. writes .-> FS
 ```
 
 ---
 
-## 2) Components (Supabase‑centric)
+## 2) Components (CLI‑centric)
 
-- **UI (Next.js)**: หน้า `/new-project`, `/project/[id]` (Chat, SRS, Tasks Kanban, Agents, Artifacts, Activity)
-- **API/Orchestrator (TS)**: LangGraph state machine (intake → sa → architect → planner → dev/qa → review)
-- **Supabase (Auth + Postgres + pgvector + Storage + Realtime + Edge Functions)**: ฐานข้อมูล/การยืนยันตัวตน/ไฟล์/สตรีมเหตุการณ์
-- **Messaging (RabbitMQ)**: cross‑language jobs/results
-- **Workers (Python)**: งาน OCR/ML/PDF‑heavy
-- **Realtime (Socket.IO/Supabase Realtime)**: สตรีมสถานะงาน/เอเจนต์
-
----
-
-## 3) Data Model (สรุป)
-
-ตารางหลัก (รายละเอียด SQL ดูไฟล์หลัก):  
-- `projects`, `requirements`, `artifacts`, `tasks`, `task_dependencies`  
-- `agent_runs`, `messages`, `memories (pgvector)`
+- **cmd/agentflow**: entrypoint หลัก สร้าง root command และ subcommands เช่น `init`, `intake`, `srs`, `plan`, `run`
+- **internal/intake**: โมดูลถาม‑ตอบ requirement (interactive TUI/CLI) + export JSON/Markdown
+- **internal/srs**: แปลง requirement เป็น SRS/User Stories/AC
+- **internal/agents**: รัน workflow ของเอเจนต์แบบลำดับขั้น (intake → sa → architect → planner → dev/qa → review)
+- **internal/io**: จัดการไฟล์ในโฟลเดอร์ `./.agentflow/...` สำหรับโปรเจกต์
+- **internal/config**: อ่าน config จากไฟล์และ ENV ด้วย Viper
+- **optional/external**: ปลั๊กอินภายนอก (exec or gRPC) สำหรับงานหนัก/เฉพาะทาง
 
 ---
 
-## 4) API & Versioning
+## 3) File-based Data Model (สรุป)
 
-- RESTful `/api/projects`, `/api/tasks`, `/api/agents/events`  
-- Versioning: `Accept: application/vnd.ai-webapp.v1+json` หรือ path `/api/v1/*`  
-- Response แบบ **DTO ที่เสถียร** (ห้ามรั่ว field ภายใน)  
-- Pagination & idempotency keys สำหรับ endpoints เขียน
+- project manifest: `./.agentflow/project.json`
+- requirements: `./.agentflow/intake/requirements.json` + `summary.md`
+- SRS & stories: `./.agentflow/analysis/SRS.md`, `./.agentflow/analysis/stories.json`
+- planning: `./.agentflow/planning/tasks.json`, `plan.md`
+- run logs: `./.agentflow/runs/<ts-id>/{agent.json,logs.ndjson,artifacts/...}`
+- artifacts: `./.agentflow/artifacts/<artifact-id>/{meta.json,data.*}`
+- attachments: `./.agentflow/attachments/*`
+- configs: `./.agentflow/configs/cli.yaml`
+
+> หมายเหตุ: รูปแบบไฟล์ต้องเป็นเวอร์ชัน และ validate ได้ด้วย schema เพื่อให้ Agents ข้ามภาษาทำงานร่วมกันได้
+
+---
+
+## 4) CLI Commands & Versioning
+
+- คำสั่งหลัก: `agentflow init`, `agentflow intake`, `agentflow srs`, `agentflow plan`, `agentflow run`
+- Versioning: แสดงเวอร์ชันด้วย `agentflow --version`; ฝังข้อมูล build (commit/date) ผ่าน `-ldflags`
+- Output: พิมพ์เป็น stdout (human/readable) และรองรับ `--json` เพื่อให้เครื่องอ่านได้
+- Conventions: exit code 0 = สำเร็จ, อื่น ๆ = ล้มเหลวพร้อมข้อความสั้น ๆ
 
 ---
 
@@ -74,51 +70,42 @@ flowchart LR
 
 ---
 
-## 6) Security
+## 6) Security (CLI)
 
-- **Auth**: Supabase Auth/NextAuth (JWT)  
-- **RLS**: บังคับผ่าน project_id ทุกตาราง (ถ้าใช้ Supabase)  
-- **Secrets**: `.env` + Secret Manager สำหรับโปรดักชัน  
-- **CORS/CSRF**: คุม origin และใช้ SameSite cookies  
-- **Least privilege**: แยก service accounts ตามบทบาท  
-- **Prompt safety**: sanitize context, block untrusted tools
-
----
-
-## 7) Observability
-
-- OpenTelemetry trace + metrics  
-- Structured logs (pino) ใส่ correlation id (`projectId`, `taskId`, `runId`)  
-- Error budget & SLO (เช่น 99.9% uptime) 
+- **Secrets**: อ่านจาก ENV/ไฟล์คอนฟิก (Viper) และหลีกเลี่ยงการพิมพ์ลง stdout/log โดยไม่จำเป็น
+- **Least privilege**: จำกัดสิทธิ์ไฟล์คอนฟิก (`0600`), แยกโทเคนตามบทบาท/สcope
+- **Network**: ตรวจสอบ TLS เมื่อเรียกบริการภายนอก, รองรับ proxy/corporate CA หากจำเป็น
+- **Supply chain**: ใช้ Go modules พร้อม `go.sum`; เปิดใช้ `-trimpath`; พิจารณา SLSA/Goreleaser provenance
+- **Prompt safety**: sanitize context, block untrusted exec/plugins โดยใส่ allowlist
 
 ---
 
-## 8) Performance & Scalability
+## 7) Observability (CLI)
 
-- Horizontal scale: API stateless, Workers autoscale  
-- Queue‑backpressure ผ่าน RabbitMQ; ใช้ prefetch จำกัดงานต่อ worker  
-- DB: index/partition ตาม usage; อ่าน replica สำหรับ heavy read  
-- Cache: edge caching (Vercel) สำหรับ public metadata (ถ้ามี)  
+- Structured logs (Zap/Logrus) พร้อม fields เช่น `project`, `task`, `run`
+- Verbosity flags: `-v/--verbose`, `--trace` สำหรับ debug ขั้นสูง
+- Exit codes ชัดเจน + สรุปผลสั้นๆ ที่ stderr เมื่อผิดพลาด
 
 ---
 
-## 9) Deployment
+## 8) Performance & Scalability (CLI)
 
-- **FE/API**: Vercel (preview per PR)  
-- **DB**: Supabase/RDS (migrations via SQL)  
-- **MQ**: CloudAMQP (managed RabbitMQ)  
-- **Workers**: Docker on Fargate/Cloud Run/K8s  
-- **Secrets**: Manager ของ cloud ที่ใช้
+- เริ่มต้นเร็ว (cold start < 200ms ถ้าเป็นไปได้), ประหยัดหน่วยความจำ
+- ประมวลผลไฟล์แบบ stream เมื่ออ่าน/เขียนข้อมูลขนาดใหญ่
+- รองรับ parallelism แบบ `--concurrency N` เมื่อเหมาะสม
 
-**.env ตัวอย่าง (Supabase‑first)**
+---
+
+## 9) Distribution & Releases
+
+- Build ด้วย `go build`/Goreleaser สำหรับหลายแพลตฟอร์ม (darwin/linux/windows; amd64/arm64)
+- แจกจ่ายผ่าน Homebrew/Scoop/Archives; เซ็นไบนารีถ้าจำเป็น
+- ตัวอย่าง ENV ที่ CLI ใช้:
 ```bash
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.0-thinking
-DATABASE_URL=postgres://...
-SUPABASE_URL=...
-SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
-AMQP_URL=amqp://guest:guest@localhost:5672/
+HTTP_PROXY=...
+NO_COLOR=1 # ปิดสีสำหรับ CI
 ```
 
 ---
@@ -132,24 +119,25 @@ AMQP_URL=amqp://guest:guest@localhost:5672/
 
 ---
 
-## 11) Mermaid Sequences
+## 11) Mermaid Sequences (CLI)
 
 ### Kickoff → Results
 ```mermaid
 sequenceDiagram
-  participant UI
-  participant API as API TS
-  participant MQ as RabbitMQ
-  participant PY as Worker Python
-  participant DB
+  participant User as User (Terminal)
+  participant CLI as agentflow (Go CLI)
+  participant Plugin as External Plugin (optional)
+  participant FS as Filesystem
 
-  UI->>API: POST /api/projects
-  API->>DB: create project
-  API->>MQ: publish ml.extract_keywords
-  PY-->>MQ: consume ml.*
-  PY->>MQ: publish ml.extract_keywords.done
-  API->>DB: persist outputs
-  API-->>UI: ws: progress/update
+  User->>CLI: agentflow init
+  CLI->>FS: create ./.agentflow
+  User->>CLI: agentflow intake --interactive
+  CLI->>FS: write requirements.json
+  User->>CLI: agentflow srs --in requirements.json --out SRS.md
+  CLI->>FS: write SRS.md, stories.json
+  CLI->>Plugin: exec agentflow-ml (optional)
+  Plugin-->>CLI: outputs (JSON)
+  CLI->>FS: persist artifacts
 ```
 
 ---
@@ -164,82 +152,77 @@ sequenceDiagram
 
 ---
 
-## 1.1 Supabase Components (บทบาท)
-- **Auth**: จัดการผู้ใช้/Session/JWT (ใช้ RLS ผูก project_id)
-- **Postgres**: ข้อมูลทั้งหมด (projects, requirements, artifacts, tasks, agent_runs, messages, memories)
-- **pgvector**: เก็บ embedding สำหรับความจำโครงการ
-- **Storage**: เก็บ artifacts (เช่น SRS.md, test reports) ภายใต้โฟลเดอร์ `/artifacts/<projectId>/...`
-- **Realtime**: subscribe การเปลี่ยนแปลงของตาราง (เช่น `tasks`, `agent_runs`) เพื่ออัปเดต UI
-- **Edge Functions**: webhook / งานสั้น ๆ ที่ต้องรัน server-side ใกล้ DB (เช่น แปลงไฟล์, ส่งอีเมลแจ้งเตือน)
-
-
----
-
-## 2.1 Supabase Integration (ตัวอย่างโค้ด)
-
-**Client (Next.js):**
-```ts
-import { createClient } from '@supabase/supabase-js';
-
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-```
-
-**Server (Next.js Route Handler) – ใช้ Service Role ใน server-only env:**
-```ts
-import { createClient } from '@supabase/supabase-js';
-
-export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
-```
-
-**Realtime subscribe ตัวอย่าง:**
-```ts
-const channel = supabase.channel('tasks-stream')
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` }, payload => {
-    // update UI
-  })
-  .subscribe();
-```
-
-**Storage (อัปโหลด artifact):**
-```ts
-await supabase.storage
-  .from('artifacts')
-  .upload(`artifacts/${projectId}/SRS_v1.md`, fileBlob, { upsert: true });
-```
+## 1.1 CLI Components (โครงสร้างโฟลเดอร์)
+- `cmd/agentflow/` — main และ root command (Cobra)
+- `internal/config/` — Viper config, default values, ENV binding
+- `internal/intake/` — โมดูล intake/interview (interactive/non-interactive)
+- `internal/srs/` — สร้าง SRS/User Stories/AC
+- `internal/io/` — จัดการไฟล์/โฟลเดอร์, JSON/Markdown helpers
+- `pkg/...` — ไลบรารีสาธารณะ (ถ้าต้องการให้ผู้อื่นใช้ซ้ำ)
 
 ---
 
-## 6.1 RLS (Row-Level Security) Policies (ตัวอย่าง)
+## 2.1 CLI Integration (ตัวอย่างโค้ด)
 
-```sql
--- เปิด RLS
-alter table projects enable row level security;
+**cmd/agentflow/main.go (Cobra root):**
+```go
+package main
 
--- ตัวอย่างนโยบาย: ให้เจ้าของโปรเจกต์อ่าน/เขียนได้
-create policy project_owner_rw on projects
-  for all
-  using (owner_id = auth.uid())
-  with check (owner_id = auth.uid());
+import (
+  "fmt"
+  "os"
+  "github.com/spf13/cobra"
+  "github.com/spf13/viper"
+)
 
--- tasks: ให้สมาชิกทีมที่ถูกเชิญในตาราง project_members เข้าได้
-create table project_members (
-  project_id uuid references projects(id) on delete cascade,
-  user_id uuid not null,
-  role text check (role in ('owner','admin','member')) default 'member',
-  primary key (project_id, user_id)
-);
+var rootCmd = &cobra.Command{
+  Use:   "agentflow",
+  Short: "AI software workflow CLI",
+}
 
-alter table tasks enable row level security;
+func init() {
+  cobra.OnInitialize(initConfig)
+  rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging")
+  viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+}
 
-create policy tasks_team_rw on tasks
-  for all
-  using (exists (select 1 from project_members m where m.project_id = tasks.project_id and m.user_id = auth.uid()))
-  with check (exists (select 1 from project_members m where m.project_id = tasks.project_id and m.user_id = auth.uid()));
+func initConfig() {
+  viper.SetConfigName("config")
+  viper.SetConfigType("yaml")
+  viper.AddConfigPath("$HOME/.config/agentflow")
+  viper.AutomaticEnv()
+  _ = viper.ReadInConfig()
+}
+
+func main() {
+  if err := rootCmd.Execute(); err != nil {
+    fmt.Fprintln(os.Stderr, err)
+    os.Exit(1)
+  }
+}
+```
+
+**internal/intake/intake.go:**
+```go
+package intake
+
+type Question struct { Key, Ask string }
+
+type Result struct { Questions []Question; Decisions []string }
+
+func RunInteractive() (Result, error) { /* ... */ return Result{}, nil }
+```
+
+**เพิ่ม subcommand ตัวอย่าง:**
+```go
+var intakeCmd = &cobra.Command{
+  Use:   "intake",
+  Short: "Collect requirements interactively",
+  RunE: func(cmd *cobra.Command, args []string) error {
+    // call intake.RunInteractive()
+    return nil
+  },
+}
+
+func init() { rootCmd.AddCommand(intakeCmd) }
 ```
