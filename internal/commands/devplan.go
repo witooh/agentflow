@@ -81,7 +81,7 @@ func DevPlan(opts DevPlanOptions) error {
 	} else if opts.DryRun {
 		taskList = scaffoldTaskList()
 	} else {
-		client := langgraph.NewClient(cfg.LangGraph.BaseURL)
+		client := langgraph.NewClient()
 		resp, err := client.RunAgent(langgraph.RunRequest{
 			Role:   role,
 			Prompt: p,
@@ -93,7 +93,7 @@ func DevPlan(opts DevPlanOptions) error {
 		})
 		if err != nil {
 			// fallback to scaffold
-			taskList = scaffoldTaskList() + fmt.Sprintf("\n\n> Note: LangGraph call failed, wrote scaffold instead. Error: %v\n", err)
+			taskList = scaffoldTaskList() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
 			runID = resp.RunID
 			taskList = ensureCheckboxList(resp.Content)

@@ -23,9 +23,9 @@ type Client struct {
 }
 
 type RunRequest struct {
-	Role   string                 `json:"role"`
-	Prompt string                 `json:"prompt"`
-	Params map[string]interface{} `json:"params,omitempty"`
+	Role   string         `json:"role"`
+	Prompt string         `json:"prompt"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 type RunResponse struct {
@@ -46,11 +46,11 @@ type HealthResponse struct {
 	Status string `json:"status"`
 }
 
-func NewClient(baseURL string) *Client {
+func NewClient() *Client {
 	return &Client{
-		baseURL:    trimTrailingSlash(baseURL),
+		baseURL:    "https://api.openai.com/v1",
 		hc:         &http.Client{Timeout: 30 * time.Second},
-		apiKey:     os.Getenv("LANGGRAPH_API_KEY"),
+		apiKey:     os.Getenv("OPENAI_API_KEY"),
 		maxRetries: 3,
 		baseDelay:  300 * time.Millisecond,
 		timeout:    30 * time.Second,
@@ -72,32 +72,85 @@ func (c *Client) WithTimeout(d time.Duration) *Client {
 }
 
 func (c *Client) RunAgent(req RunRequest) (*RunResponse, error) {
-	endpoint := c.baseURL + "/agents/run"
-	var out RunResponse
-	if err := c.doJSON(http.MethodPost, endpoint, req, &out); err != nil {
+	// Translate RunRequest into OpenAI Chat Completions request
+	type chatMessage struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	type chatReq struct {
+		Model       string        `json:"model"`
+		Messages    []chatMessage `json:"messages"`
+		Temperature float64       `json:"temperature,omitempty"`
+		MaxTokens   int           `json:"max_tokens,omitempty"`
+	}
+	type chatResp struct {
+		ID      string `json:"id"`
+		Choices []struct {
+			Message struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	model := ""
+	if req.Params != nil {
+		if v, ok := req.Params["model"].(string); ok {
+			model = v
+		}
+	}
+	if model == "" {
+		model = "gpt-4o-mini"
+	}
+	temperature := 0.0
+	if req.Params != nil {
+		if v, ok := req.Params["temperature"].(float64); ok {
+			temperature = v
+		} else if v, ok := req.Params["temperature"].(float32); ok {
+			temperature = float64(v)
+		} else if v, ok := req.Params["temperature"].(int); ok {
+			temperature = float64(v)
+		}
+	}
+	maxTokens := 0
+	if req.Params != nil {
+		if v, ok := req.Params["max_tokens"].(int); ok {
+			maxTokens = v
+		} else if v, ok := req.Params["max_tokens"].(float64); ok {
+			maxTokens = int(v)
+		}
+	}
+
+	in := chatReq{
+		Model:       model,
+		Messages:    []chatMessage{{Role: "user", Content: req.Prompt}},
+		Temperature: temperature,
+		MaxTokens:   maxTokens,
+	}
+
+	endpoint := c.baseURL + "/v1/chat/completions"
+	var out chatResp
+	if err := c.doJSON(http.MethodPost, endpoint, in, &out); err != nil {
 		return nil, err
 	}
-	if out.RunID == "" && out.Content == "" {
-		return nil, errors.New("invalid response from LangGraph")
+	content := ""
+	if len(out.Choices) > 0 {
+		content = out.Choices[0].Message.Content
 	}
-	return &out, nil
+	return &RunResponse{RunID: out.ID, Content: content}, nil
 }
 
 func (c *Client) AskQuestions(req QuestionsRequest) (*QuestionsResponse, error) {
-	endpoint := c.baseURL + "/agents/questions"
-	var out QuestionsResponse
-	if err := c.doJSON(http.MethodPost, endpoint, req, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
+	// Not supported with direct OpenAI integration; kept for backward compatibility
+	return nil, errors.New("AskQuestions is not supported with OpenAI client")
 }
 
-// HealthCheck calls GET /healthz and returns nil if status OK (2xx) and optionally parses a {status} body.
+// HealthCheck calls GET /v1/models to verify API reachability.
 func (c *Client) HealthCheck() error {
-	url := c.baseURL + "/healthz"
+	url := c.baseURL + "/v1/models"
 	attempts := c.maxRetries + 1
 	var lastErr error
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		req, err := http.NewRequest(http.MethodGet, url, nil)
 		if err != nil {
 			return err
@@ -130,7 +183,7 @@ func (c *Client) HealthCheck() error {
 	return lastErr
 }
 
-func (c *Client) doJSON(method, url string, in interface{}, out interface{}) error {
+func (c *Client) doJSON(method, url string, in any, out any) error {
 	var payload []byte
 	var err error
 	if in != nil {
@@ -140,7 +193,7 @@ func (c *Client) doJSON(method, url string, in interface{}, out interface{}) err
 		}
 	}
 	attempts := c.maxRetries + 1
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		var body io.Reader
 		if payload != nil {
 			body = bytes.NewReader(payload)
@@ -165,7 +218,7 @@ func (c *Client) doJSON(method, url string, in interface{}, out interface{}) err
 			defer resp.Body.Close()
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				b, _ := io.ReadAll(resp.Body)
-				err = fmt.Errorf("langgraph error: %s: %s", resp.Status, string(b))
+				err = fmt.Errorf("openai error: %s: %s", resp.Status, string(b))
 				return
 			}
 			if out != nil {
@@ -191,10 +244,8 @@ func transient(err error) bool {
 	}
 	// treat DNS errors and connection refused as transient
 	var opErr *net.OpError
-	if errors.As(err, &opErr) {
-		return true
-	}
-	return false
+
+	return errors.As(err, &opErr)
 }
 
 func backoffSleep(base time.Duration, attempt int) {

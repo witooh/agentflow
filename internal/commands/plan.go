@@ -67,7 +67,7 @@ func Plan(opts PlanOptions) error {
 	if opts.DryRun {
 		content = scaffoldPlanOutput(prompt)
 	} else {
-		client := langgraph.NewClient(cfg.LangGraph.BaseURL)
+		client := langgraph.NewClient()
 		resp, err := client.RunAgent(langgraph.RunRequest{
 			Role:   role,
 			Prompt: prompt,
@@ -78,7 +78,7 @@ func Plan(opts PlanOptions) error {
 			},
 		})
 		if err != nil {
-			content = scaffoldPlanOutput(prompt) + fmt.Sprintf("\n\n> Note: LangGraph call failed, wrote scaffold instead. Error: %v\n", err)
+			content = scaffoldPlanOutput(prompt) + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
 			runID = resp.RunID
 			content = resp.Content

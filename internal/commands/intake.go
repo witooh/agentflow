@@ -77,7 +77,7 @@ func Intake(opts IntakeOptions) error {
 	} else if opts.DryRun {
 		baseContent = scaffoldRequirements(p, timeline)
 	} else {
-		client := langgraph.NewClient(cfg.LangGraph.BaseURL)
+		client := langgraph.NewClient()
 		resp, err := client.RunAgent(langgraph.RunRequest{
 			Role:   role,
 			Prompt: p,
@@ -89,7 +89,7 @@ func Intake(opts IntakeOptions) error {
 		})
 		if err != nil {
 			// Fallback to scaffold on error
-			baseContent = scaffoldRequirements(p, timeline) + fmt.Sprintf("\n\n> Note: LangGraph call failed, wrote scaffold instead. Error: %v\n", err)
+			baseContent = scaffoldRequirements(p, timeline) + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
 			runID = resp.RunID
 			baseContent = ensureRequirementsSections(resp.Content, timeline)

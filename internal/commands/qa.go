@@ -71,7 +71,7 @@ func QA(opts QAOptions) error {
 	if opts.DryRun {
 		content = scaffoldQATestPlan()
 	} else {
-		client := langgraph.NewClient(cfg.LangGraph.BaseURL)
+		client := langgraph.NewClient()
 		resp, err := client.RunAgent(langgraph.RunRequest{
 			Role:   role,
 			Prompt: prompt,
@@ -82,7 +82,7 @@ func QA(opts QAOptions) error {
 			},
 		})
 		if err != nil {
-			content = scaffoldQATestPlan() + fmt.Sprintf("\n\n> Note: LangGraph call failed, wrote scaffold instead. Error: %v\n", err)
+			content = scaffoldQATestPlan() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
 			runID = resp.RunID
 			content = resp.Content

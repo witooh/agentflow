@@ -81,7 +81,7 @@ func Design(opts DesignOptions) error {
 			},
 		})
 		if err != nil {
-			content = scaffoldDesignOutput() + fmt.Sprintf("\n\n> Note: LangGraph call failed, wrote scaffold instead. Error: %v\n", err)
+   content = scaffoldDesignOutput() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
 			runID = resp.RunID
 			content = resp.Content

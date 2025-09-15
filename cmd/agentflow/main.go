@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"agentflow/internal/commands"
 )
@@ -69,12 +68,11 @@ Use "%s <command> -h" for command-specific help.
 func initCmd(args []string) {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	projectName := fs.String("project-name", "MyProject", "Project name to store in config")
-	baseURL := fs.String("base-url", "http://localhost:8123", "LangGraph Server base URL")
-	model := fs.String("model", "gpt-4o-mini", "Default LLM model")
+	model := fs.String("model", "gpt-5", "Default LLM model")
 	configPath := fs.String("config", ".agentflow/config.json", "Path to config file to create")
 	_ = fs.Parse(args)
 
-	if err := commands.Init(*configPath, *projectName, *baseURL, *model); err != nil {
+	if err := commands.Init(*configPath, *projectName, *model); err != nil {
 		log.Fatalf("init failed: %v", err)
 	}
 	fmt.Printf("Initialized %s\n", *configPath)
@@ -83,10 +81,10 @@ func initCmd(args []string) {
 func intakeCmd(args []string) {
 	fs := flag.NewFlagSet("intake", flag.ExitOnError)
 	configPath := fs.String("config", ".agentflow/config.json", "Path to config file")
-	inputsDir := fs.String("input", "input", "Input directory with .md files")
-	outputDir := fs.String("output", "output", "Output directory")
+	inputsDir := fs.String("input", ".agentflow/input", "Input directory with .md files")
+	outputDir := fs.String("output", ".agentflow/output", "Output directory")
 	role := fs.String("role", "po_pm", "Role to use for prompt building (po_pm)")
-	dryRun := fs.Bool("dry-run", false, "Do not call LangGraph, just scaffold output")
+	dryRun := fs.Bool("dry-run", false, "Do not call OpenAI, just scaffold output")
 	_ = fs.Parse(args)
 
 	if err := commands.Intake(commands.IntakeOptions{
@@ -108,10 +106,10 @@ func intakeCmd(args []string) {
 func planCmd(args []string) {
 	fs := flag.NewFlagSet("plan", flag.ExitOnError)
 	configPath := fs.String("config", ".agentflow/config.json", "Path to config file")
-	reqPath := fs.String("requirements", "output/requirements.md", "Path to requirements.md")
-	outputDir := fs.String("output", "output", "Output directory")
+	reqPath := fs.String("requirements", ".agentflow/output/requirements.md", "Path to requirements.md")
+	outputDir := fs.String("output", ".agentflow/output", "Output directory")
 	role := fs.String("role", "sa", "Role to use for planning (sa)")
-	dryRun := fs.Bool("dry-run", false, "Do not call LangGraph, just scaffold output")
+	dryRun := fs.Bool("dry-run", false, "Do not call OpenAI, just scaffold output")
 	_ = fs.Parse(args)
 
 	if err := commands.Plan(commands.PlanOptions{
@@ -129,17 +127,13 @@ func planCmd(args []string) {
 	fmt.Printf("Wrote %s, %s, %s\n", filepath.Join(*outputDir, "srs.md"), filepath.Join(*outputDir, "stories.md"), filepath.Join(*outputDir, "acceptance_criteria.md"))
 }
 
-func stubCmd(name string) {
-	fmt.Printf("%s: not implemented yet. Coming soon.\n", strings.ToUpper(name))
-}
-
 func qaCmd(args []string) {
 	fs := flag.NewFlagSet("qa", flag.ExitOnError)
 	configPath := fs.String("config", ".agentflow/config.json", "Path to config file")
-	sourceDir := fs.String("source", "output", "Directory with prior docs (srs/stories/AC)")
-	outputDir := fs.String("output", "output", "Output directory")
+	sourceDir := fs.String("source", ".agentflow/output", "Directory with prior docs (srs/stories/AC)")
+	outputDir := fs.String("output", ".agentflow/output", "Output directory")
 	role := fs.String("role", "qa", "Role to use for QA (qa)")
-	dryRun := fs.Bool("dry-run", false, "Do not call LangGraph, just scaffold output")
+	dryRun := fs.Bool("dry-run", false, "Do not call OpenAI, just scaffold output")
 	_ = fs.Parse(args)
 
 	if err := commands.QA(commands.QAOptions{
@@ -157,10 +151,10 @@ func qaCmd(args []string) {
 func designCmd(args []string) {
 	fs := flag.NewFlagSet("design", flag.ExitOnError)
 	configPath := fs.String("config", ".agentflow/config.json", "Path to config file")
-	sourceDir := fs.String("source", "output", "Directory with prior docs (requirements/srs/stories/AC)")
-	outputDir := fs.String("output", "output", "Output directory")
+	sourceDir := fs.String("source", ".agentflow/output", "Directory with prior docs (requirements/srs/stories/AC)")
+	outputDir := fs.String("output", ".agentflow/output", "Output directory")
 	role := fs.String("role", "sa", "Role to use for design (sa)")
-	dryRun := fs.Bool("dry-run", false, "Do not call LangGraph, just scaffold output")
+	dryRun := fs.Bool("dry-run", false, "Do not call OpenAI, just scaffold output")
 	_ = fs.Parse(args)
 
 	if err := commands.Design(commands.DesignOptions{
@@ -178,10 +172,10 @@ func designCmd(args []string) {
 func devplanCmd(args []string) {
 	fs := flag.NewFlagSet("devplan", flag.ExitOnError)
 	configPath := fs.String("config", ".agentflow/config.json", "Path to config file")
-	sourceDir := fs.String("source", "docs", "Directory with prior generated docs (requirements/srs/stories/...)")
-	outputDir := fs.String("output", "docs", "Output directory for task_list.md and tasks/")
+	sourceDir := fs.String("source", ".agentflow/output", "Directory with prior generated docs (requirements/srs/stories/...)")
+	outputDir := fs.String("output", ".agentflow/output", "Output directory for task_list.md and tasks/")
 	role := fs.String("role", "dev", "Role to use for devplanning (dev)")
-	dryRun := fs.Bool("dry-run", false, "Do not call LangGraph, just scaffold output")
+	dryRun := fs.Bool("dry-run", false, "Do not call OpenAI, just scaffold output")
 	_ = fs.Parse(args)
 
 	if err := commands.DevPlan(commands.DevPlanOptions{

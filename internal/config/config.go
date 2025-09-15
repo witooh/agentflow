@@ -14,10 +14,7 @@ import (
 type Config struct {
 	SchemaVersion string `json:"schemaVersion"`
 	ProjectName   string `json:"projectName"`
-	LangGraph     struct {
-		BaseURL string `json:"baseUrl"`
-	} `json:"langgraph"`
-	LLM struct {
+	LLM           struct {
 		Model       string  `json:"model"`
 		Temperature float64 `json:"temperature"`
 		MaxTokens   int     `json:"maxTokens"`
@@ -46,11 +43,10 @@ type Config struct {
 	} `json:"metadata"`
 }
 
-func DefaultConfig(projectName, baseURL, model string) *Config {
+func DefaultConfig(projectName, model string) *Config {
 	c := &Config{}
 	c.SchemaVersion = "0.1"
 	c.ProjectName = projectName
-	c.LangGraph.BaseURL = baseURL
 	c.LLM.Model = model
 	c.LLM.Temperature = 0.2
 	c.LLM.MaxTokens = 4000
@@ -60,8 +56,8 @@ func DefaultConfig(projectName, baseURL, model string) *Config {
 		"qa":    "You are a QA Lead. Produce a concise test plan.",
 		"dev":   "You are a Tech Lead. Produce dev task list and per-task context.",
 	}
-	c.IO.InputDir = "input"
-	c.IO.OutputDir = "output"
+	c.IO.InputDir = ".agentflow/input"
+	c.IO.OutputDir = ".agentflow/output"
 	c.Security.EnvKeys = []string{"OPENAI_API_KEY"}
 	c.Redact.Secrets = true
 	c.DevPlan.MaxContextCharsPerTask = 4000
@@ -126,9 +122,6 @@ func (c *Config) Validate() error {
 	if strings.TrimSpace(c.ProjectName) == "" {
 		return errors.New("projectName is required")
 	}
-	if strings.TrimSpace(c.LangGraph.BaseURL) == "" {
-		return errors.New("langgraph.baseUrl is required")
-	}
 	if strings.TrimSpace(c.LLM.Model) == "" {
 		return errors.New("llm.model is required")
 	}
@@ -153,9 +146,6 @@ func (c *Config) Validate() error {
 // - AGENTFLOW_INPUT_DIR → io.inputDir
 // - AGENTFLOW_OUTPUT_DIR → io.outputDir
 func (c *Config) ApplyEnv() {
-	if v := strings.TrimSpace(os.Getenv("AGENTFLOW_BASE_URL")); v != "" {
-		c.LangGraph.BaseURL = v
-	}
 	if v := strings.TrimSpace(os.Getenv("AGENTFLOW_MODEL")); v != "" {
 		c.LLM.Model = v
 	}
@@ -182,7 +172,8 @@ func (c *Config) ApplyEnv() {
 func (c *Config) RedactedEnv() map[string]string {
 	m := map[string]string{}
 	keys := append([]string{}, c.Security.EnvKeys...)
-	// Include LANGGRAPH_API_KEY which is actually used by the client
+	// Include OPENAI_API_KEY (used by OpenAI client) and legacy LANGGRAPH_API_KEY for backward compatibility
+	keys = append(keys, "OPENAI_API_KEY")
 	keys = append(keys, "LANGGRAPH_API_KEY")
 	seen := map[string]bool{}
 	for _, k := range keys {

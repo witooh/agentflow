@@ -36,76 +36,78 @@ func TestTransientNetError(t *testing.T) {
 	}
 }
 
-func TestClientRunAndQuestionsRetryAndAuth(t *testing.T) {
+func TestClientRunRetryAndAuth(t *testing.T) {
 	var runCalls int32
-	var qCalls int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/agents/run":
-			c := atomic.AddInt32(&runCalls, 1)
-			// Require auth header and non-empty body on all attempts
-			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
-				w.WriteHeader(401)
-				w.Write([]byte("missing auth"))
-				return
-			}
-			if r.Body == nil {
-				w.WriteHeader(400)
-				return
-			}
-			var rr RunRequest
-			if err := json.NewDecoder(r.Body).Decode(&rr); err != nil || rr.Prompt == "" {
-				w.WriteHeader(400)
-				return
-			}
-			// First two attempts fail with 500 to trigger retry
-			if c < 3 {
-				w.WriteHeader(500)
-				w.Write([]byte("temporary"))
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(RunResponse{RunID: "r-123", Content: "ok"})
-		case "/agents/questions":
-			atomic.AddInt32(&qCalls, 1)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(QuestionsResponse{Status: "queued"})
-		default:
+		if r.URL.Path != "/v1/chat/completions" {
 			w.WriteHeader(404)
+			return
 		}
+		c := atomic.AddInt32(&runCalls, 1)
+		// Require auth header and non-empty body on all attempts
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			w.WriteHeader(401)
+			w.Write([]byte("missing auth"))
+			return
+		}
+		if r.Body == nil {
+			w.WriteHeader(400)
+			return
+		}
+		// We don't need full schema validation; just ensure JSON is present
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(400)
+			return
+		}
+		if _, ok := body["model"]; !ok {
+			w.WriteHeader(400)
+			return
+		}
+		// First two attempts fail with 500 to trigger retry
+		if c < 3 {
+			w.WriteHeader(500)
+			w.Write([]byte("temporary"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]any{
+			"id": "chatcmpl-123",
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "ok",
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
-	os.Setenv("LANGGRAPH_API_KEY", "test-token")
-	defer os.Unsetenv("LANGGRAPH_API_KEY")
+	os.Setenv("OPENAI_API_KEY", "test-token")
+	defer os.Unsetenv("OPENAI_API_KEY")
 
-	c := NewClient(srv.URL).WithRetries(3, time.Nanosecond).WithTimeout(2 * time.Second)
+	c := NewClient().WithRetries(3, time.Nanosecond).WithTimeout(2 * time.Second)
 
-	out, err := c.RunAgent(RunRequest{Role: "dev", Prompt: "hello"})
+	out, err := c.RunAgent(RunRequest{Role: "dev", Prompt: "hello", Params: map[string]any{"model": "gpt-4o-mini"}})
 	if err != nil {
 		t.Fatalf("RunAgent error: %v", err)
 	}
-	if out.RunID != "r-123" || out.Content != "ok" {
+	if out.RunID != "chatcmpl-123" || out.Content != "ok" {
 		t.Fatalf("unexpected run response: %+v", out)
 	}
 	if got := atomic.LoadInt32(&runCalls); got != 3 {
-		t.Fatalf("expected 3 calls to /agents/run, got %d", got)
-	}
-
-	q, err := c.AskQuestions(QuestionsRequest{RunID: "r-123", Questions: []string{"Q1"}})
-	if err != nil {
-		t.Fatalf("AskQuestions error: %v", err)
-	}
-	if q.Status != "queued" {
-		t.Fatalf("unexpected questions response: %+v", q)
+		t.Fatalf("expected 3 calls to /v1/chat/completions, got %d", got)
 	}
 }
 
 func TestHealthCheckRetriesThenOK(t *testing.T) {
 	var calls int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/healthz" {
+		if r.URL.Path != "/v1/models" {
 			w.WriteHeader(404)
 			return
 		}
@@ -120,7 +122,7 @@ func TestHealthCheckRetriesThenOK(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL).WithRetries(3, time.Nanosecond)
+	c := NewClient().WithRetries(3, time.Nanosecond)
 	if err := c.HealthCheck(); err != nil {
 		t.Fatalf("HealthCheck error: %v", err)
 	}
