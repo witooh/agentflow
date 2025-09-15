@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "0.1",
+  "projectName": "Demo",
+  "langgraph": {
+    "baseUrl": "http://localhost:8123"
+  },
+  "llm": {
+    "model": "gpt-4o-mini",
+    "temperature": 0.2,
+    "maxTokens": 4000
+  },
+  "roles": {
+    "dev": "You are a Tech Lead. Produce dev task list and per-task context.",
+    "po_pm": "You are a PO/PM. Convert input context into formal requirements with sections: Goals, Scope, FR, NFR, Assumptions, Open Questions.",
+    "qa": "You are a QA Lead. Produce a concise test plan.",
+    "sa": "You are a Solution Architect. Transform requirements into SRS/Stories/AC."
+  },
+  "io": {
+    "inputDir": "input",
+    "outputDir": "output"
+  },
+  "security": {
+    "envKeys": [
+      "OPENAI_API_KEY"
+    ]
+  },
+  "redact": {
+    "secrets": true
+  },
+  "devplan": {
+    "maxContextCharsPerTask": 4000
+  },
+  "askHuman": {
+    "mode": "interactive"
+  },
+  "metadata": {
+    "owner": "",
+    "repo": "",
+    "tags": []
+  }
+}

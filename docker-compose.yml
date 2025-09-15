@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  langgraph:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8123:8123"
+    environment:
+      - PORT=8123
+      # Optionally pass through an API key if your real implementation needs it
+      - LANGGRAPH_API_KEY=${LANGGRAPH_API_KEY:-}
+    restart: unless-stopped

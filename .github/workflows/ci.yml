@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and Test (Go ${{ matrix.go }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ['1.22']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+          cache: true
+
+      - name: Go env
+        run: |
+          go version
+          go env
+        shell: bash
+
+      - name: Download deps
+        run: go mod download
+        shell: bash
+
+      - name: Build (sanity)
+        run: go build ./...
+        shell: bash
+
+      - name: Run tests with coverage
+        run: go test ./... -coverprofile=coverage.out -covermode=atomic
+        shell: bash
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tee coverage.txt
+        shell: bash
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}
+          path: |
+            coverage.out
+            coverage.txt
+          if-no-files-found: error
+
+      - name: Upload junit/test logs (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.os }}
+          path: |
+            **/*.test
+          if-no-files-found: ignore
