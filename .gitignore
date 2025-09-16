@@ -1,0 +1,22 @@
+# Build artifacts
+/dist/
+coverage.out
+
+# AgentFlow generated data
+.agentflow/output/
+.agentflow/config.json
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Logs
+*.log
+.agentflow

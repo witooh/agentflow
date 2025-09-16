@@ -70,7 +70,7 @@ func Design(opts DesignOptions) error {
 	if opts.DryRun {
 		content = scaffoldDesignOutput()
 	} else {
-		client := langgraph.NewClient(cfg.LangGraph.BaseURL)
+		client := langgraph.NewClient()
 		resp, err := client.RunAgent(langgraph.RunRequest{
 			Role:   role,
 			Prompt: prompt,
@@ -81,7 +81,7 @@ func Design(opts DesignOptions) error {
 			},
 		})
 		if err != nil {
-   content = scaffoldDesignOutput() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
+			content = scaffoldDesignOutput() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
 			runID = resp.RunID
 			content = resp.Content

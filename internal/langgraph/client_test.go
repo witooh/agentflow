@@ -89,6 +89,8 @@ func TestClientRunRetryAndAuth(t *testing.T) {
 
 	os.Setenv("OPENAI_API_KEY", "test-token")
 	defer os.Unsetenv("OPENAI_API_KEY")
+	os.Setenv("OPENAI_BASE_URL", srv.URL)
+	defer os.Unsetenv("OPENAI_BASE_URL")
 
 	c := NewClient().WithRetries(3, time.Nanosecond).WithTimeout(2 * time.Second)
 
@@ -122,6 +124,8 @@ func TestHealthCheckRetriesThenOK(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	os.Setenv("OPENAI_BASE_URL", srv.URL)
+	defer os.Unsetenv("OPENAI_BASE_URL")
 	c := NewClient().WithRetries(3, time.Nanosecond)
 	if err := c.HealthCheck(); err != nil {
 		t.Fatalf("HealthCheck error: %v", err)

@@ -10,7 +10,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
+	"strconv"
 )
 
 type Client struct {
@@ -47,14 +49,44 @@ type HealthResponse struct {
 }
 
 func NewClient() *Client {
-	return &Client{
-		baseURL:    "https://api.openai.com/v1",
-		hc:         &http.Client{Timeout: 30 * time.Second},
-		apiKey:     os.Getenv("OPENAI_API_KEY"),
-		maxRetries: 3,
-		baseDelay:  300 * time.Millisecond,
-		timeout:    30 * time.Second,
-	}
+    // Default to OpenAI public API; allow override via OPENAI_BASE_URL for tests/dev.
+    base := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL"))
+    if base == "" {
+        base = "https://api.openai.com"
+    }
+    c := &Client{
+        baseURL:    trimTrailingSlash(base),
+        hc:         &http.Client{Timeout: 60 * time.Second},
+        apiKey:     os.Getenv("OPENAI_API_KEY"),
+        maxRetries: 3,
+        baseDelay:  500 * time.Millisecond,
+        timeout:    60 * time.Second,
+    }
+    // Optional environment overrides
+    if v := strings.TrimSpace(os.Getenv("AGENTFLOW_HTTP_TIMEOUT")); v != "" {
+        if d, err := time.ParseDuration(v); err == nil {
+            c.WithTimeout(d)
+        } else if n, err := strconv.Atoi(v); err == nil {
+            c.WithTimeout(time.Duration(n) * time.Second)
+        }
+    } else if v := strings.TrimSpace(os.Getenv("OPENAI_TIMEOUT")); v != "" { // alias
+        if d, err := time.ParseDuration(v); err == nil {
+            c.WithTimeout(d)
+        } else if n, err := strconv.Atoi(v); err == nil {
+            c.WithTimeout(time.Duration(n) * time.Second)
+        }
+    }
+    if v := strings.TrimSpace(os.Getenv("AGENTFLOW_MAX_RETRIES")); v != "" {
+        if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+            c.maxRetries = n
+        }
+    }
+    if v := strings.TrimSpace(os.Getenv("AGENTFLOW_RETRY_BASE_DELAY_MS")); v != "" {
+        if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+            c.baseDelay = time.Duration(n) * time.Millisecond
+        }
+    }
+    return c
 }
 
 // WithRetries allows overriding retry behavior.
@@ -100,7 +132,7 @@ func (c *Client) RunAgent(req RunRequest) (*RunResponse, error) {
 		}
 	}
 	if model == "" {
-		model = "gpt-4o-mini"
+		model = "gpt-5"
 	}
 	temperature := 0.0
 	if req.Params != nil {
@@ -112,20 +144,20 @@ func (c *Client) RunAgent(req RunRequest) (*RunResponse, error) {
 			temperature = float64(v)
 		}
 	}
-	maxTokens := 0
-	if req.Params != nil {
-		if v, ok := req.Params["max_tokens"].(int); ok {
-			maxTokens = v
-		} else if v, ok := req.Params["max_tokens"].(float64); ok {
-			maxTokens = int(v)
-		}
-	}
+	// maxTokens := 0
+	// if req.Params != nil {
+	// 	if v, ok := req.Params["max_tokens"].(int); ok {
+	// 		maxTokens = v
+	// 	} else if v, ok := req.Params["max_tokens"].(float64); ok {
+	// 		maxTokens = int(v)
+	// 	}
+	// }
 
 	in := chatReq{
 		Model:       model,
 		Messages:    []chatMessage{{Role: "user", Content: req.Prompt}},
 		Temperature: temperature,
-		MaxTokens:   maxTokens,
+		// MaxTokens:   maxTokens,
 	}
 
 	endpoint := c.baseURL + "/v1/chat/completions"
