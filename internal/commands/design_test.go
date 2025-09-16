@@ -45,7 +45,7 @@ func TestDesign_DryRun_WritesFiles(t *testing.T) {
 	outDir := filepath.Join(dir, "out")
 	_ = os.MkdirAll(outDir, 0o755)
 
-	cfg := config.DefaultConfig("TestProject", "http://localhost:8123", "gpt-4o-mini")
+	cfg := config.DefaultConfig("TestProject", "gpt-4o-mini")
 	cfg.IO.OutputDir = outDir
 	cfgPath := filepath.Join(dir, ".agentflow", "config.json")
 	if err := config.Save(cfgPath, cfg); err != nil {

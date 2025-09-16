@@ -111,7 +111,7 @@ func TestValidateConstraints(t *testing.T) {
 }
 
 func TestRedactedEnv(t *testing.T) {
-	c := DefaultConfig("Demo", "http://localhost:8123/", "gpt-4o-mini")
+	c := DefaultConfig("Demo", "gpt-4o-mini")
 	os.Setenv("OPENAI_API_KEY", "secret1")
 	os.Setenv("LANGGRAPH_API_KEY", "secret2")
 	t.Cleanup(func() {
