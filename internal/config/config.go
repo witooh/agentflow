@@ -43,6 +43,9 @@ type Config struct {
 	} `json:"metadata"`
 }
 
+// DefaultConfig constructs a Config with sensible defaults for the given
+// project name and LLM model. Call ApplyEnv to allow environment variables
+// to override specific fields.
 func DefaultConfig(projectName, model string) *Config {
 	c := &Config{}
 	c.SchemaVersion = "0.1"
@@ -68,6 +71,9 @@ func DefaultConfig(projectName, model string) *Config {
 	return c
 }
 
+// EnsureDirs creates the directory that will hold the config file as well as
+// the input/output directories referenced by the provided Config. If c is nil,
+// only the parent directory of configPath is created.
 func EnsureDirs(configPath string, c *Config) error {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return err
@@ -87,6 +93,8 @@ func EnsureDirs(configPath string, c *Config) error {
 	return nil
 }
 
+// Save writes the provided Config to the given path as pretty-printed JSON.
+// Required directories are created if they don't already exist.
 func Save(path string, c *Config) error {
 	if err := EnsureDirs(path, c); err != nil {
 		return err
@@ -98,6 +106,8 @@ func Save(path string, c *Config) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
+// Load reads a Config from the given path which must contain valid JSON that
+// matches the Config structure.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -110,6 +120,8 @@ func Load(path string) (*Config, error) {
 	return &c, nil
 }
 
+// Validate performs basic sanity checks against the Config values to ensure
+// required fields are set and numeric ranges are respected.
 func (c *Config) Validate() error {
 	if c.SchemaVersion == "" {
 		return errors.New("schemaVersion is required")
@@ -139,7 +151,6 @@ func (c *Config) Validate() error {
 
 // ApplyEnv overrides configuration fields from environment variables if set.
 // Supported variables:
-// - AGENTFLOW_BASE_URL → langgraph.baseUrl
 // - AGENTFLOW_MODEL → llm.model
 // - AGENTFLOW_TEMPERATURE → llm.temperature (float)
 // - AGENTFLOW_MAX_TOKENS → llm.maxTokens (int)

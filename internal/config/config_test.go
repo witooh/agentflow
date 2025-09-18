@@ -10,7 +10,7 @@ func TestDefaultConfigAndSaveLoad(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, ".agentflow", "config.json")
 
-	c := DefaultConfig("Demo", "http://localhost:8123/", "gpt-4o-mini")
+	c := DefaultConfig("Demo", "gpt-4o-mini")
 	// Ensure IO dirs are scoped under temp dir to avoid polluting repo
 	c.IO.InputDir = filepath.Join(dir, "input")
 	c.IO.OutputDir = filepath.Join(dir, "output")
@@ -33,15 +33,21 @@ func TestDefaultConfigAndSaveLoad(t *testing.T) {
 	if err := loaded.Validate(); err != nil {
 		t.Fatalf("Validate failed: %v", err)
 	}
-	if got, want := loaded.LangGraph.BaseURL, "http://localhost:8123/"; got != want {
-		t.Fatalf("BaseURL mismatch: got %q want %q", got, want)
+	if got, want := loaded.LLM.Model, "gpt-4o-mini"; got != want {
+		t.Fatalf("Model mismatch: got %q want %q", got, want)
+	}
+	if got := loaded.IO.InputDir; got != c.IO.InputDir {
+		t.Fatalf("InputDir mismatch: got %q want %q", got, c.IO.InputDir)
+	}
+	if got := loaded.IO.OutputDir; got != c.IO.OutputDir {
+		t.Fatalf("OutputDir mismatch: got %q want %q", got, c.IO.OutputDir)
 	}
 }
 
 func TestEnvOverridesAndValidation(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, ".agentflow", "config.json")
-	c := DefaultConfig("Demo", "http://localhost:8123/", "gpt-4o-mini")
+	c := DefaultConfig("Demo", "gpt-4o-mini")
 	c.IO.InputDir = filepath.Join(dir, "input")
 	c.IO.OutputDir = filepath.Join(dir, "output")
 	if err := Save(cfgPath, c); err != nil {
@@ -49,20 +55,11 @@ func TestEnvOverridesAndValidation(t *testing.T) {
 	}
 
 	// Set env overrides
-	os.Setenv("AGENTFLOW_BASE_URL", "http://example.com:9000")
-	os.Setenv("AGENTFLOW_MODEL", "gpt-4o-mini-2025")
-	os.Setenv("AGENTFLOW_TEMPERATURE", "0.7")
-	os.Setenv("AGENTFLOW_MAX_TOKENS", "12345")
-	os.Setenv("AGENTFLOW_INPUT_DIR", filepath.Join(dir, "custom_in"))
-	os.Setenv("AGENTFLOW_OUTPUT_DIR", filepath.Join(dir, "custom_out"))
-	t.Cleanup(func() {
-		os.Unsetenv("AGENTFLOW_BASE_URL")
-		os.Unsetenv("AGENTFLOW_MODEL")
-		os.Unsetenv("AGENTFLOW_TEMPERATURE")
-		os.Unsetenv("AGENTFLOW_MAX_TOKENS")
-		os.Unsetenv("AGENTFLOW_INPUT_DIR")
-		os.Unsetenv("AGENTFLOW_OUTPUT_DIR")
-	})
+	t.Setenv("AGENTFLOW_MODEL", "gpt-4o-mini-2025")
+	t.Setenv("AGENTFLOW_TEMPERATURE", "0.7")
+	t.Setenv("AGENTFLOW_MAX_TOKENS", "12345")
+	t.Setenv("AGENTFLOW_INPUT_DIR", filepath.Join(dir, "custom_in"))
+	t.Setenv("AGENTFLOW_OUTPUT_DIR", filepath.Join(dir, "custom_out"))
 
 	loaded, err := Load(cfgPath)
 	if err != nil {
@@ -71,9 +68,6 @@ func TestEnvOverridesAndValidation(t *testing.T) {
 	loaded.ApplyEnv()
 	if err := loaded.Validate(); err != nil {
 		t.Fatalf("Validate after env: %v", err)
-	}
-	if got, want := loaded.LangGraph.BaseURL, "http://example.com:9000"; got != want {
-		t.Fatalf("BaseURL env override got %q want %q", got, want)
 	}
 	if got, want := loaded.LLM.Model, "gpt-4o-mini-2025"; got != want {
 		t.Fatalf("Model env override got %q want %q", got, want)
@@ -93,7 +87,7 @@ func TestEnvOverridesAndValidation(t *testing.T) {
 }
 
 func TestValidateConstraints(t *testing.T) {
-	c := DefaultConfig("Demo", "http://localhost:8123/", "gpt-4o-mini")
+	c := DefaultConfig("Demo", "gpt-4o-mini")
 	c.IO.InputDir = "in"
 	c.IO.OutputDir = "out"
 	if err := c.Validate(); err != nil {
@@ -112,12 +106,8 @@ func TestValidateConstraints(t *testing.T) {
 
 func TestRedactedEnv(t *testing.T) {
 	c := DefaultConfig("Demo", "gpt-4o-mini")
-	os.Setenv("OPENAI_API_KEY", "secret1")
-	os.Setenv("LANGGRAPH_API_KEY", "secret2")
-	t.Cleanup(func() {
-		os.Unsetenv("OPENAI_API_KEY")
-		os.Unsetenv("LANGGRAPH_API_KEY")
-	})
+	t.Setenv("OPENAI_API_KEY", "secret1")
+	t.Setenv("LANGGRAPH_API_KEY", "secret2")
 	m := c.RedactedEnv()
 	if m["OPENAI_API_KEY"] != "***" {
 		t.Fatalf("expected OPENAI_API_KEY to be redacted")

@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"agentflow/internal/config"
@@ -21,10 +22,10 @@ UML body`
 
 func TestEnsureArchitecture_FallbackOnEmpty(t *testing.T) {
 	out := ensureArchitecture("")
-	if out == "" || !contains(out, "Project Structure") {
+	if out == "" || !strings.Contains(out, "Project Structure") {
 		t.Fatal("ensureArchitecture should provide a fallback with Project Structure")
 	}
-	if !contains(out, "plantuml") {
+	if !strings.Contains(out, "plantuml") {
 		t.Fatal("ensureArchitecture should include a PlantUML fence when missing")
 	}
 }
@@ -34,7 +35,7 @@ func TestEnsureUML_FallbackOnEmpty(t *testing.T) {
 	if out == "" {
 		t.Fatal("ensureUML should provide fallback sections")
 	}
-	if !contains(out, "Sequence:") || !contains(out, "Class:") || !contains(out, "Activity:") {
+	if !strings.Contains(out, "Sequence:") || !strings.Contains(out, "Class:") || !strings.Contains(out, "Activity:") {
 		t.Fatalf("ensureUML should include sequence/class/activity diagrams; got: %s", out)
 	}
 }
@@ -76,11 +77,11 @@ func TestDesign_DryRun_WritesFiles(t *testing.T) {
 		t.Fatalf("missing uml.md: %v", err)
 	}
 	b, _ := os.ReadFile(arch)
-	if !contains(string(b), "Project Structure") || !contains(string(b), "plantuml") {
+	if !strings.Contains(strings.ToLower(string(b)), "project structure") || !strings.Contains(strings.ToLower(string(b)), "plantuml") {
 		t.Fatalf("architecture.md missing required sections: %s", string(b))
 	}
 	b2, _ := os.ReadFile(uml)
-	if !contains(string(b2), "Sequence:") || !contains(string(b2), "Class:") || !contains(string(b2), "Activity:") {
+	if !strings.Contains(string(b2), "Sequence:") || !strings.Contains(string(b2), "Class:") || !strings.Contains(string(b2), "Activity:") {
 		t.Fatalf("uml.md missing required diagrams: %s", string(b2))
 	}
 }
