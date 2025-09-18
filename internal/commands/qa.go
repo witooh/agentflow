@@ -1,14 +1,15 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"agentflow/internal/agents"
 	"agentflow/internal/config"
-	"agentflow/internal/langgraph"
 )
 
 type QAOptions struct {
@@ -49,7 +50,7 @@ func QA(opts QAOptions) error {
 			ctxParts = append(ctxParts, fmt.Sprintf("# File: %s\n\n%s", name, string(b)))
 		}
 	}
-	context := strings.TrimSpace(strings.Join(ctxParts, "\n\n"))
+	ctxContent := strings.TrimSpace(strings.Join(ctxParts, "\n\n"))
 
 	role := strings.TrimSpace(opts.Role)
 	if role == "" {
@@ -62,7 +63,7 @@ func QA(opts QAOptions) error {
 
 	prompt := strings.TrimSpace(strings.Join([]string{
 		"SYSTEM:\n" + strings.TrimSpace(tpl),
-		"CONTEXT:\n" + context,
+		"CONTEXT:\n" + ctxContent,
 		"EXTRA:\nProduce one markdown document delimited by the exact marker on its own line:\n--- TESTPLAN START ---\n...\nThe test plan must include at minimum these sections as markdown headings: 1) Test Strategy, 2) Scope, 3) Test Types (unit/integration/e2e), 4) Mapping to Acceptance Criteria, 5) Test Environments & Data, 6) Entry/Exit Criteria, 7) Risks & Mitigations, 8) Execution Plan & Responsibilities. Keep it practical and actionable.",
 	}, "\n\n"))
 
@@ -71,21 +72,12 @@ func QA(opts QAOptions) error {
 	if opts.DryRun {
 		content = scaffoldQATestPlan()
 	} else {
-		client := langgraph.NewClient()
-		resp, err := client.RunAgent(langgraph.RunRequest{
-			Role:   role,
-			Prompt: prompt,
-			Params: map[string]interface{}{
-				"model":       cfg.LLM.Model,
-				"temperature": cfg.LLM.Temperature,
-				"max_tokens":  cfg.LLM.MaxTokens,
-			},
-		})
+		resp, err := agents.LQ.Run(context.Background(), prompt)
 		if err != nil {
 			content = scaffoldQATestPlan() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
-			runID = resp.RunID
-			content = resp.Content
+			// runID = resp.RunID
+			content = resp
 		}
 	}
 

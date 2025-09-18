@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"agentflow/internal/agents"
 	"agentflow/internal/config"
-	"agentflow/internal/langgraph"
 	"agentflow/internal/prompt"
 )
 
@@ -77,22 +78,14 @@ func Intake(opts IntakeOptions) error {
 	} else if opts.DryRun {
 		baseContent = scaffoldRequirements(p, timeline)
 	} else {
-		client := langgraph.NewClient()
-		resp, err := client.RunAgent(langgraph.RunRequest{
-			Role:   role,
-			Prompt: p,
-			Params: map[string]interface{}{
-				"model":       cfg.LLM.Model,
-				"temperature": cfg.LLM.Temperature,
-				"max_tokens":  cfg.LLM.MaxTokens,
-			},
-		})
+		resp, err := agents.PO.Run(context.Background(), p) // log prompt via agent
 		if err != nil {
 			// Fallback to scaffold on error
 			baseContent = scaffoldRequirements(p, timeline) + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
-			runID = resp.RunID
-			baseContent = ensureRequirementsSections(resp.Content, timeline)
+			// runID = resp.RunID
+			// baseContent = ensureRequirementsSections(resp, timeline)
+			baseContent = resp
 		}
 	}
 
@@ -133,25 +126,8 @@ func scaffoldRequirements(p string, timeline string) string {
 	return strings.Join(parts, "\n")
 }
 
-func ensureRequirementsSections(s string, timeline string) string {
-	s = strings.TrimSpace(s)
-	lower := strings.ToLower(s)
-	addIfMissing := func(section string, content string) {
-		if !strings.Contains(lower, strings.ToLower(section)) {
-			s += "\n\n" + section + "\n\n" + strings.TrimSpace(content)
-			lower = strings.ToLower(s)
-		}
-	}
-	addIfMissing("## Goals", "- ...")
-	addIfMissing("## Scope", "- ...")
-	addIfMissing("## Functional Requirements (FR)", "- ...")
-	addIfMissing("## Non-Functional Requirements (NFR)", "- ...")
-	addIfMissing("## Assumptions", "- ...")
-	addIfMissing("## Constraints", "- ...")
-	addIfMissing("## Timeline Summary", timeline)
-	addIfMissing("## Open Questions", "- ...")
-	addIfMissing("## Questions to Human", "- ...")
-	return s
+func ensureRequirementsSections(s string) string {
+	return strings.TrimSpace(s)
 }
 
 func withMetadataHeader(cfg *config.Config, role string, files []string, runID string, body string) string {
@@ -193,5 +169,5 @@ func withMetadataHeader(cfg *config.Config, role string, files []string, runID s
 	if strings.HasPrefix(strings.TrimSpace(strings.ToLower(content)), strings.ToLower("# AgentFlow — Requirements")) {
 		return content
 	}
-	return header.String() + ensureRequirementsSections(content, "")
+	return header.String() + ensureRequirementsSections(content)
 }

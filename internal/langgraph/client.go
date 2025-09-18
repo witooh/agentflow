@@ -1,18 +1,13 @@
 package langgraph
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"net"
 	"net/http"
-	"os"
-	"strings"
 	"time"
-	"strconv"
 )
 
 type Client struct {
@@ -49,44 +44,7 @@ type HealthResponse struct {
 }
 
 func NewClient() *Client {
-    // Default to OpenAI public API; allow override via OPENAI_BASE_URL for tests/dev.
-    base := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL"))
-    if base == "" {
-        base = "https://api.openai.com"
-    }
-    c := &Client{
-        baseURL:    trimTrailingSlash(base),
-        hc:         &http.Client{Timeout: 60 * time.Second},
-        apiKey:     os.Getenv("OPENAI_API_KEY"),
-        maxRetries: 3,
-        baseDelay:  500 * time.Millisecond,
-        timeout:    60 * time.Second,
-    }
-    // Optional environment overrides
-    if v := strings.TrimSpace(os.Getenv("AGENTFLOW_HTTP_TIMEOUT")); v != "" {
-        if d, err := time.ParseDuration(v); err == nil {
-            c.WithTimeout(d)
-        } else if n, err := strconv.Atoi(v); err == nil {
-            c.WithTimeout(time.Duration(n) * time.Second)
-        }
-    } else if v := strings.TrimSpace(os.Getenv("OPENAI_TIMEOUT")); v != "" { // alias
-        if d, err := time.ParseDuration(v); err == nil {
-            c.WithTimeout(d)
-        } else if n, err := strconv.Atoi(v); err == nil {
-            c.WithTimeout(time.Duration(n) * time.Second)
-        }
-    }
-    if v := strings.TrimSpace(os.Getenv("AGENTFLOW_MAX_RETRIES")); v != "" {
-        if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-            c.maxRetries = n
-        }
-    }
-    if v := strings.TrimSpace(os.Getenv("AGENTFLOW_RETRY_BASE_DELAY_MS")); v != "" {
-        if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-            c.baseDelay = time.Duration(n) * time.Millisecond
-        }
-    }
-    return c
+	return nil
 }
 
 // WithRetries allows overriding retry behavior.
@@ -104,72 +62,7 @@ func (c *Client) WithTimeout(d time.Duration) *Client {
 }
 
 func (c *Client) RunAgent(req RunRequest) (*RunResponse, error) {
-	// Translate RunRequest into OpenAI Chat Completions request
-	type chatMessage struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-	type chatReq struct {
-		Model       string        `json:"model"`
-		Messages    []chatMessage `json:"messages"`
-		Temperature float64       `json:"temperature,omitempty"`
-		MaxTokens   int           `json:"max_tokens,omitempty"`
-	}
-	type chatResp struct {
-		ID      string `json:"id"`
-		Choices []struct {
-			Message struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-
-	model := ""
-	if req.Params != nil {
-		if v, ok := req.Params["model"].(string); ok {
-			model = v
-		}
-	}
-	if model == "" {
-		model = "gpt-5"
-	}
-	temperature := 0.0
-	if req.Params != nil {
-		if v, ok := req.Params["temperature"].(float64); ok {
-			temperature = v
-		} else if v, ok := req.Params["temperature"].(float32); ok {
-			temperature = float64(v)
-		} else if v, ok := req.Params["temperature"].(int); ok {
-			temperature = float64(v)
-		}
-	}
-	// maxTokens := 0
-	// if req.Params != nil {
-	// 	if v, ok := req.Params["max_tokens"].(int); ok {
-	// 		maxTokens = v
-	// 	} else if v, ok := req.Params["max_tokens"].(float64); ok {
-	// 		maxTokens = int(v)
-	// 	}
-	// }
-
-	in := chatReq{
-		Model:       model,
-		Messages:    []chatMessage{{Role: "user", Content: req.Prompt}},
-		Temperature: temperature,
-		// MaxTokens:   maxTokens,
-	}
-
-	endpoint := c.baseURL + "/v1/chat/completions"
-	var out chatResp
-	if err := c.doJSON(http.MethodPost, endpoint, in, &out); err != nil {
-		return nil, err
-	}
-	content := ""
-	if len(out.Choices) > 0 {
-		content = out.Choices[0].Message.Content
-	}
-	return &RunResponse{RunID: out.ID, Content: content}, nil
+	return nil, nil
 }
 
 func (c *Client) AskQuestions(req QuestionsRequest) (*QuestionsResponse, error) {
@@ -216,57 +109,7 @@ func (c *Client) HealthCheck() error {
 }
 
 func (c *Client) doJSON(method, url string, in any, out any) error {
-	var payload []byte
-	var err error
-	if in != nil {
-		payload, err = json.Marshal(in)
-		if err != nil {
-			return err
-		}
-	}
-	attempts := c.maxRetries + 1
-	for i := range attempts {
-		var body io.Reader
-		if payload != nil {
-			body = bytes.NewReader(payload)
-		}
-		req, err := http.NewRequest(method, url, body)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if c.apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+c.apiKey)
-		}
-		resp, err := c.hc.Do(req)
-		if err != nil {
-			if transient(err) && i < attempts-1 {
-				backoffSleep(c.baseDelay, i)
-				continue
-			}
-			return err
-		}
-		func() {
-			defer resp.Body.Close()
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				b, _ := io.ReadAll(resp.Body)
-				err = fmt.Errorf("openai error: %s: %s", resp.Status, string(b))
-				return
-			}
-			if out != nil {
-				err = json.NewDecoder(resp.Body).Decode(out)
-			}
-		}()
-		if err == nil {
-			return nil
-		}
-		if i < attempts-1 {
-			backoffSleep(c.baseDelay, i)
-			continue
-		}
-		return err
-	}
-	return errors.New("unreachable")
+	return nil
 }
 
 func transient(err error) bool {

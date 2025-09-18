@@ -6,8 +6,8 @@ import (
 
 func TestEnsureRequirementsSections_AddsMissing(t *testing.T) {
 	in := "# Title\nSome content without required headings"
-	timeline := "- 2025-09-13 — First idea\n- 2025-09-14 — More details"
-	out := ensureRequirementsSections(in, timeline)
+	// timeline := "- 2025-09-13 — First idea\n- 2025-09-14 — More details"
+	out := ensureRequirementsSections(in)
 	checks := []string{
 		"## Goals",
 		"## Scope",

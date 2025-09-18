@@ -1,14 +1,15 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"agentflow/internal/agents"
 	"agentflow/internal/config"
-	"agentflow/internal/langgraph"
 )
 
 type DesignOptions struct {
@@ -48,7 +49,7 @@ func Design(opts DesignOptions) error {
 			ctxParts = append(ctxParts, fmt.Sprintf("# File: %s\n\n%s", name, string(b)))
 		}
 	}
-	context := strings.TrimSpace(strings.Join(ctxParts, "\n\n"))
+	ctxContent := strings.TrimSpace(strings.Join(ctxParts, "\n\n"))
 
 	role := opts.Role
 	if role == "" {
@@ -61,7 +62,7 @@ func Design(opts DesignOptions) error {
 
 	prompt := strings.TrimSpace(strings.Join([]string{
 		"SYSTEM:\n" + strings.TrimSpace(tpl),
-		"CONTEXT:\n" + context,
+		"CONTEXT:\n" + ctxContent,
 		"EXTRA:\nProduce two markdown documents. Delimit each with exact markers on their own lines:\n--- ARCH START ---\n...\n--- UML START ---\n...\nMake sure architecture.md contains a '## Project Structure' section and PlantUML component/deployment diagrams using ```plantuml fences. UML doc must include at least sequence, class, and activity diagrams using ```plantuml fences.",
 	}, "\n\n"))
 
@@ -70,21 +71,12 @@ func Design(opts DesignOptions) error {
 	if opts.DryRun {
 		content = scaffoldDesignOutput()
 	} else {
-		client := langgraph.NewClient()
-		resp, err := client.RunAgent(langgraph.RunRequest{
-			Role:   role,
-			Prompt: prompt,
-			Params: map[string]interface{}{
-				"model":       cfg.LLM.Model,
-				"temperature": cfg.LLM.Temperature,
-				"max_tokens":  cfg.LLM.MaxTokens,
-			},
-		})
+		resp, err := agents.SA.Run(context.Background(), prompt)
 		if err != nil {
 			content = scaffoldDesignOutput() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
-			runID = resp.RunID
-			content = resp.Content
+			// runID = resp.RunID
+			content = resp
 		}
 	}
 

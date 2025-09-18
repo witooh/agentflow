@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"agentflow/internal/agents"
 	"agentflow/internal/config"
-	"agentflow/internal/langgraph"
 	"agentflow/internal/prompt"
 )
 
@@ -81,22 +82,13 @@ func DevPlan(opts DevPlanOptions) error {
 	} else if opts.DryRun {
 		taskList = scaffoldTaskList()
 	} else {
-		client := langgraph.NewClient()
-		resp, err := client.RunAgent(langgraph.RunRequest{
-			Role:   role,
-			Prompt: p,
-			Params: map[string]interface{}{
-				"model":       cfg.LLM.Model,
-				"temperature": cfg.LLM.Temperature,
-				"max_tokens":  cfg.LLM.MaxTokens,
-			},
-		})
+		resp, err := agents.SA.Run(context.Background(), p)
 		if err != nil {
 			// fallback to scaffold
 			taskList = scaffoldTaskList() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
-			runID = resp.RunID
-			taskList = ensureCheckboxList(resp.Content)
+			// runID = resp.RunID
+			taskList = ensureCheckboxList(resp)
 		}
 	}
 
@@ -164,22 +156,7 @@ func scaffoldTaskList() string {
 var checkboxRe = regexp.MustCompile(`(?i)^(\s*)-\s*\[( |x)\]\s*(.+?)\s*$`)
 
 func ensureCheckboxList(s string) string {
-	s = strings.TrimSpace(s)
-	if strings.Contains(s, "[ ]") || strings.Contains(s, "[x]") {
-		return s
-	}
-	// Wrap each line into checkbox
-	lines := strings.Split(s, "\n")
-	var out []string
-	for _, ln := range lines {
-		ln = strings.TrimSpace(ln)
-		if ln == "" || strings.HasPrefix(ln, "#") {
-			out = append(out, ln)
-			continue
-		}
-		out = append(out, "- [ ] "+ln)
-	}
-	return strings.Join(out, "\n")
+	return strings.TrimSpace(s)
 }
 
 func parseTasks(s string) []devTask {

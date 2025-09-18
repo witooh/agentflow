@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"agentflow/internal/agents"
 	"agentflow/internal/config"
-	"agentflow/internal/langgraph"
 )
 
 type PlanOptions struct {
@@ -67,21 +68,12 @@ func Plan(opts PlanOptions) error {
 	if opts.DryRun {
 		content = scaffoldPlanOutput(prompt)
 	} else {
-		client := langgraph.NewClient()
-		resp, err := client.RunAgent(langgraph.RunRequest{
-			Role:   role,
-			Prompt: prompt,
-			Params: map[string]interface{}{
-				"model":       cfg.LLM.Model,
-				"temperature": cfg.LLM.Temperature,
-				"max_tokens":  cfg.LLM.MaxTokens,
-			},
-		})
+		resp, err := agents.SA.Run(context.Background(), prompt)
 		if err != nil {
 			content = scaffoldPlanOutput(prompt) + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
-			runID = resp.RunID
-			content = resp.Content
+			// runID = resp.RunID
+			content = resp
 		}
 	}
 
