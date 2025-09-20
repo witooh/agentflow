@@ -1,10 +1,11 @@
 # Build artifacts
 /dist/
 coverage.out
+dist/
 
 # AgentFlow generated data
-.agentflow/output/
-.agentflow/config.json
+.agentflow/
+agentflow
 
 # IDE settings
 .vscode/
@@ -19,6 +20,3 @@ __pycache__/
 
 # Logs
 *.log
-.agentflow
-agentflow
-coverage.out
