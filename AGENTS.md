@@ -1,45 +1,23 @@
 # Repository Guidelines
 
-## Project Structure & Modules
-- `cmd/agentflow/`: CLI entrypoint (`main.go`).
-- `internal/commands/`: subcommands (`init`, `intake`, `plan`, `devplan`).
-- `internal/config/`, `internal/langgraph/`, `internal/prompt/`: config, HTTP client, and prompt builder.
-- `docs/`: generated and reference docs; `output/` holds current run outputs.
-- `scripts/`: helper scripts (e.g., `build_cli.sh`).
-- `langgraph/server/app.py`: FastAPI mock for the LangGraph service.
-- Docker: `docker-compose.yml`, `Dockerfile` for the mock server.
+## Project Structure & Module Organization
+Core entrypoint lives in `cmd/agentflow/`. Reusable commands sit under `internal/commands/` (`init`, `intake`, `plan`, `devplan`). Shared utilities are in `internal/config/`, `internal/langgraph/`, and `internal/prompt/`. Generated docs live in `docs/`, with `docs/output/` capturing the latest runs; avoid editing generated files directly. Helper scripts are in `scripts/`, and the mock LangGraph FastAPI server resides at `langgraph/server/app.py` with Docker assets at the repo root.
 
-## Build, Test, and Run
-- Build CLI (current platform): `./scripts/build_cli.sh --current` → `dist/agentflow`.
-- Run from source: `go run ./cmd/agentflow --help`
-- Manual build: `go build -o dist/agentflow ./cmd/agentflow`
-- Start mock LangGraph: `docker-compose up --build -d` (health: `curl localhost:8123/healthz`).
-- Tests: `go test ./...` (add tests as described below).
+## Build, Test, and Development Commands
+- `./scripts/build_cli.sh --current` builds the CLI binary into `dist/agentflow` for the host platform.
+- `go run ./cmd/agentflow --help` exercises the CLI from source; swap `--help` for any command during active development.
+- `go build -o dist/agentflow ./cmd/agentflow` performs a manual build when iterating on the entrypoint.
+- `docker-compose up --build -d` starts the mock LangGraph service; confirm readiness via `curl localhost:8123/healthz`.
+- `go test ./...` runs the full Go test suite; append `-race` or `-cover` for deeper validation.
 
-## Coding Style & Naming
-- Go 1.22; format and vet before pushing: `go fmt ./... && go vet ./...`.
-- Package names lower-case; exported identifiers use CamelCase.
-- Options pattern: define `XOptions` structs; return `error` (no panics in libs).
-- Errors: sentinel variables (e.g., `var ErrNoInputs = errors.New("...")`).
+## Coding Style & Naming Conventions
+Target Go 1.22, format code with `go fmt ./...`, and lint using `go vet ./...`. Package names stay lowercase; exported identifiers use CamelCase. Favor the options pattern (`XOptions`) for constructors and return `error` rather than panicking. Keep comments purposeful and close to non-obvious logic.
 
 ## Testing Guidelines
-- Place `*_test.go` alongside code under `internal/...`.
-- Prefer table-driven tests; include edge cases and error paths.
-- Useful invocations: `go test -race ./...` and `go test -cover ./...`.
-- For HTTP calls, test with the mock server or stub the client.
+Place `*_test.go` alongside the code under `internal/...`. Prefer table-driven cases, covering happy paths, edge conditions, and failure retries. Use `httptest` or the Docker mock server for LangGraph interactions, asserting headers, retries, and timeouts. Run `go test -race ./...` before landing changes that touch concurrency.
 
-## Commit & PR Guidelines
-- Use Conventional Commits (e.g., `feat(cli): add intake command`, `fix(langgraph): retry jitter`).
-- PRs must include: purpose, linked issues, test notes (commands/output), and risk/rollback.
-- Keep diffs focused; update docs if behavior changes (`docs/`, usage text).
+## Commit & Pull Request Guidelines
+Adopt Conventional Commits (e.g., `feat(cli): add intake command`, `fix(langgraph): retry jitter`). PRs should state purpose, link relevant issues, document test runs (command and outcome), and highlight risk plus rollback strategy. Keep diffs focused and update `docs/` when behaviour changes.
 
-## Security & Configuration
-- Initialize config: `agentflow init --project-name MyApp` → `.agentflow/config.json`.
-- Do not commit secrets; `LANGGRAPH_API_KEY` is read from the environment.
-- Consider ignoring generated artifacts (`output/`, `dist/`); `.agentflow/.gitignore` is scaffolded.
-
-## LangGraph Client
-- Location: `internal/langgraph/client.go`
-- Endpoints: `POST /agents/run` (RunRequest → RunResponse), `POST /agents/questions` (QuestionsRequest → QuestionsResponse), `GET /healthz`.
-- Behavior: HTTP client with context/timeout, Authorization header if `LANGGRAPH_API_KEY` is set, and retry with exponential backoff + jitter for transient and non-2xx responses.
-- Testing: see `internal/langgraph/client_test.go` for retry, auth header, and healthcheck tests using `httptest`.
+## Security & Configuration Tips
+Initialize projects with `agentflow init --project-name MyApp`, which seeds `.agentflow/config.json`. Never commit secrets; supply `LANGGRAPH_API_KEY` via the environment. Ignore generated artifacts such as `dist/` and `docs/output/` to keep the repo clean.
