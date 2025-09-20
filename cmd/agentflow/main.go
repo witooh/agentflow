@@ -209,11 +209,7 @@ func devplanCmd(args []string) {
 		Role:       *role,
 		DryRun:     *dryRun,
 	}); err != nil {
-		if errors.Is(err, commands.ErrNoContextDocs) {
-			fmt.Fprintln(os.Stderr, "warning: no context docs found; wrote scaffold task list and task files")
-		} else {
-			log.Fatalf("devplan failed: %v", err)
-		}
+		log.Fatalf("devplan failed: %v", err)
 	}
 	fmt.Printf("Wrote %s and %s/*.md\n", filepath.Join(*outputDir, "task_list.md"), filepath.Join(*outputDir, "tasks"))
 }

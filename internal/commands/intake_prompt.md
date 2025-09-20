@@ -1,4 +1,5 @@
 ### 🎯 Output format (Markdown)
+ให้อ่านไฟล์ทั้งหมดที่ folder {{.InputPath}}
 
 - **Business Goals & Success KPIs**  
   - Describe business drivers (compliance, UX, marketing agility, cost savings).  
