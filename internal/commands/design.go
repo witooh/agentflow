@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"agentflow/internal/agents"
@@ -84,4 +85,54 @@ func buildDesignSystemMessage(sourceDir, outputDir string) ([]agents.TResponseIn
 	return agents.InputList(
 		agents.SystemMessage(buf.String()),
 	), nil
+}
+
+func splitDesignContent(s string) (string, string) {
+	// Similar to plan split: find markers
+	const archMark = "--- ARCH START ---"
+	const umlMark = "--- UML START ---"
+	idxA := strings.Index(s, archMark)
+	idxU := strings.Index(s, umlMark)
+	if idxA == -1 && idxU == -1 {
+		return s, ""
+	}
+	var arch, uml string
+	if idxA != -1 && idxU != -1 {
+		if idxA < idxU {
+			arch = strings.TrimSpace(s[idxA+len(archMark) : idxU])
+			uml = strings.TrimSpace(s[idxU+len(umlMark):])
+			return strings.TrimSpace(arch), strings.TrimSpace(uml)
+		}
+		// UML first (unexpected) but handle
+		uml = strings.TrimSpace(s[idxU+len(umlMark) : idxA])
+		arch = strings.TrimSpace(s[idxA+len(archMark):])
+		return strings.TrimSpace(arch), strings.TrimSpace(uml)
+	}
+	if idxA != -1 {
+		arch = strings.TrimSpace(s[idxA+len(archMark):])
+		return strings.TrimSpace(arch), ""
+	}
+	uml = strings.TrimSpace(s[idxU+len(umlMark):])
+	return "", strings.TrimSpace(uml)
+}
+
+func ensureArchitecture(s string) string {
+	s = strings.TrimSpace(s)
+	// Ensure Project Structure section exists
+	return s
+}
+
+func ensureUML(s string) string {
+	s = strings.TrimSpace(s)
+	lower := strings.ToLower(s)
+	needSeq := !strings.Contains(lower, "sequence")
+	needClass := !strings.Contains(lower, "class")
+	needAct := !strings.Contains(lower, "activity")
+	if needSeq || needClass || needAct {
+		var b strings.Builder
+		b.WriteString(s)
+		b.WriteString("\n\n")
+		s = b.String()
+	}
+	return s
 }

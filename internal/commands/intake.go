@@ -1,11 +1,16 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
+
+	_ "embed"
 
 	"agentflow/internal/agents"
 	"agentflow/internal/config"
@@ -21,6 +26,9 @@ type IntakeOptions struct {
 }
 
 var ErrNoInputs = errors.New("no input files found")
+
+//go:embed intake_prompt.md
+var intakePromptTemplate string
 
 func Intake(opts IntakeOptions) error {
 	cfg, err := config.Load(opts.ConfigPath)
@@ -50,8 +58,11 @@ func Intake(opts IntakeOptions) error {
 	if err != nil {
 		return err
 	}
-	systemMessage := createIntakeSystemMessage(cfg.IO.OutputDir)
-	prompts := agents.InputList(userPrompts, systemMessage)
+	systemMessages, err := buildIntakeSystemMessage(cfg.IO.OutputDir)
+	if err != nil {
+		return err
+	}
+	prompts := agents.InputList(userPrompts, systemMessages)
 
 	if len(files) == 0 {
 		return ErrNoInputs
@@ -67,61 +78,23 @@ func Intake(opts IntakeOptions) error {
 	return nil
 }
 
-func createIntakeSystemMessage(path string) []agents.TResponseInputItem {
-	systemMessage := agents.SystemMessage(`### 🎯 Output format (Markdown)
-
-- **Business Goals & Success KPIs**  
-  - Describe business drivers (compliance, UX, marketing agility, cost savings).  
-  - Define measurable KPIs (e.g., opt-in rate target, consent sync SLA, regulator reporting turnaround).  
-
-- **User Personas & Journeys**  
-  - Customer (mobile/web) → manage consent, banner UX.  
-  - Marketing/Analytics team → use dashboard, reporting.  
-  - Regulator/Audit → compliance log, proof of consent.  
-  - Backend/System Integrator → consume consent via API/SDK.  
-
-- **Scope (MVP vs Future Phases)**  
-  - Clearly separate **MVP features** vs **future expansion**.  
-  - Use MoSCoW or phased roadmap (MVP → Phase 2 → Mature state).  
-
-- **Functional Requirements (FR)**  
-  - Detail user-facing and system-facing capabilities.  
-  - Link each FR back to persona & business goal.  
-
-- **Non-Functional Requirements (NFR)**  
-  - Scale, latency, retention, compliance, UX accessibility, availability.  
-  - Prioritize what is critical at MVP vs later.  
-
-- **Dependencies & Risks**  
-  - Dependencies on other teams (e.g., Data Lake, Security, Compliance).  
-  - Risks (regulatory, adoption, tech feasibility).  
-
-- **Constraints**  
-  - Jurisdiction: Thailand only (PDPA).  
-  - Data residency: PDPA compliant.  
-  - Migration: cutover from OneTrust (big bang).  
-  - Certifications: not required at MVP.  
-
-- **Deliverables to Solution Architect (SA)**  
-  - Consent use cases & flows (opt-in, revoke, merge, reporting).  
-  - High-level data model (consent record, audit log, mapping to customer/device).  
-  - Integration points (mobile, web, backend, data lake).  
-  - Prioritized features (MVP vs future).  
-  - Reporting requirements (dimensions, regulator templates).  
-
-- **Timeline Summary (Product Roadmap)**  
-  - Narrate evolution chronologically:  
-    - MVP (core consent, banner, reporting baseline).  
-    - Phase 2 (advanced analytics, audience targeting, cookie discovery).  
-    - Future (scalability, certifications, multi-region compliance).  
-
-- **Questions to Human (Stakeholders)**  
-  - Business-side clarifications (regulator reporting expectation, marketing KPIs, branding rules).  
-  - Technical-side clarifications (DB choice, API standards, realtime infra).  
-`)
-
-	writeFileMessage := agents.SystemMessage(fmt.Sprintf("เอา output มาสร้างไฟล์ %s/requirements.md", path))
-	return agents.InputList(systemMessage, writeFileMessage)
+func buildIntakeSystemMessage(outputDir string) ([]agents.TResponseInputItem, error) {
+	data := struct {
+		RequirementsPath string
+	}{
+		RequirementsPath: filepath.Join(outputDir, "requirements.md"),
+	}
+	tmpl, err := template.New("intake").Parse(intakePromptTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parse intake template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("render intake template: %w", err)
+	}
+	return agents.InputList(
+		agents.SystemMessage(buf.String()),
+	), nil
 }
 
 func ensureRequirementsSections(s string) string {

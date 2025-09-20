@@ -1,16 +1,20 @@
 package commands
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
+	"text/template"
 
 	"agentflow/internal/agents"
 	"agentflow/internal/config"
-	"agentflow/internal/prompt"
 )
+
+//go:embed qa_prompt.md
+var qaPromptTemplate string
 
 type QAOptions struct {
 	ConfigPath string
@@ -42,76 +46,48 @@ func QA(opts QAOptions) error {
 		sourceDir = cfg.IO.OutputDir
 	}
 
-	files, err := prompt.GetInputFiles(sourceDir, []string{"srs.md", "stories.md", "acceptance_criteria.md", "requirements.md"})
+	prompts, err := buildQASystemMessage(sourceDir, cfg.IO.OutputDir)
 	if err != nil {
 		return err
 	}
-	systemMessages, err := prompt.GetPromptFromFiles(files)
-	if err != nil {
-		return err
-	}
-	userMessage := agents.UserMessage(strings.Join([]string{
-		"You are a QA Lead. Produce a concise but thorough test plan that aligns to the SRS and Acceptance Criteria.",
-	}, "\n\n"))
-	prompts := agents.InputList(systemMessages, userMessage)
 
-	var content string
 	if opts.DryRun {
-		content = ""
+		return nil
 	} else {
-		resp, err := agents.LQ.RunInputs(context.Background(), prompts)
+		_, err := agents.LQ.RunInputs(context.Background(), prompts)
 		if err != nil {
-			content = fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
-		} else {
-			content = resp
+			fmt.Printf("OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		}
 	}
 
-	plan := extractTestPlan(content)
-	plan = ensureTestPlan(plan)
-
-	date := time.Now().Format("2006-01-02")
-	body := "# AgentFlow — Test Plan\n\n**Date:** " + date + "\n\n" + plan
-
-	// Source path string for metadata
-	sourcePath := filepath.Join(sourceDir, "{srs,stories,ac}")
-	outPath := filepath.Join(cfg.IO.OutputDir, "test-plan.md")
-	if err := writeFileWithHeader(cfg, sourcePath, outPath, body); err != nil {
-		return err
-	}
 	return nil
 }
 
-func extractTestPlan(s string) string {
-	const mark = "--- TESTPLAN START ---"
-	idx := strings.Index(s, mark)
-	if idx == -1 {
-		return strings.TrimSpace(s)
+func buildQASystemMessage(sourceDir, outputDir string) ([]agents.TResponseInputItem, error) {
+	data := struct {
+		RequirementsPath       string
+		SrsPath                string
+		StoriesPath            string
+		AcceptanceCriteriaPath string
+		TestPlanPath           string
+	}{
+		RequirementsPath:       filepath.Join(sourceDir, "requirements.md"),
+		SrsPath:                filepath.Join(sourceDir, "srs.md"),
+		StoriesPath:            filepath.Join(sourceDir, "stories.md"),
+		AcceptanceCriteriaPath: filepath.Join(sourceDir, "acceptance_criteria.md"),
+		TestPlanPath:           filepath.Join(outputDir, "test-plan.md"),
 	}
-	return strings.TrimSpace(s[idx+len(mark):])
-}
 
-func ensureTestPlan(s string) string {
-	lower := strings.ToLower(s)
-	ensure := func(h string) bool { return strings.Contains(lower, strings.ToLower("## "+h)) }
-	parts := []string{strings.TrimSpace(s)}
-	// Append missing sections in order
-	sections := map[string]string{
-		"Test Strategy":                     "## Test Strategy\nTBD",
-		"Scope":                             "## Scope\nTBD",
-		"Test Types":                        "## Test Types\n- Unit\n- Integration\n- E2E",
-		"Mapping to Acceptance Criteria":    "## Mapping to Acceptance Criteria\nTBD",
-		"Test Environments & Data":          "## Test Environments & Data\nTBD",
-		"Entry/Exit Criteria":               "## Entry/Exit Criteria\nTBD",
-		"Risks & Mitigations":               "## Risks & Mitigations\nTBD",
-		"Execution Plan & Responsibilities": "## Execution Plan & Responsibilities\nTBD",
+	tmpl, err := template.New("qa").Parse(qaPromptTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parse qa template: %w", err)
 	}
-	for _, order := range []string{
-		"Test Strategy", "Scope", "Test Types", "Mapping to Acceptance Criteria", "Test Environments & Data", "Entry/Exit Criteria", "Risks & Mitigations", "Execution Plan & Responsibilities",
-	} {
-		if !ensure(order) {
-			parts = append(parts, sections[order])
-		}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("render qa template: %w", err)
 	}
-	return strings.TrimSpace(strings.Join(parts, "\n\n"))
+
+	return agents.InputList(
+		agents.SystemMessage(buf.String()),
+	), nil
 }

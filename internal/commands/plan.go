@@ -1,13 +1,17 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
+
+	_ "embed"
 
 	"agentflow/internal/agents"
 	"agentflow/internal/config"
@@ -23,6 +27,9 @@ type PlanOptions struct {
 
 var ErrNoRequirements = errors.New("requirements.md not found")
 
+//go:embed plan_prompt.md
+var planPromptTemplate string
+
 func Plan(opts PlanOptions) error {
 	cfg, err := config.Load(opts.ConfigPath)
 	if err != nil {
@@ -32,34 +39,64 @@ func Plan(opts PlanOptions) error {
 	if opts.OutputDir != "" {
 		cfg.IO.OutputDir = opts.OutputDir
 	}
+	if strings.TrimSpace(opts.Requirements) == "" {
+		opts.Requirements = filepath.Join(cfg.IO.OutputDir, "requirements.md")
+	}
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
 	if err := config.EnsureDirs(opts.ConfigPath, cfg); err != nil {
 		return err
 	}
+	if _, err := os.Stat(opts.Requirements); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrNoRequirements
+		}
+		return err
+	}
 
-	prompts := createPlanSystemMessage(opts.Requirements, cfg.IO.OutputDir)
+	prompts, err := buildPlanSystemMessage(opts.Requirements, cfg.IO.OutputDir)
+	if err != nil {
+		return err
+	}
 
 	if opts.DryRun {
 		return nil
-	} else {
-		_, err := agents.SA.RunInputs(context.Background(), prompts)
-		if err != nil {
-			fmt.Printf("OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
-		}
 	}
 
-	return nil
+	_, err = agents.SA.RunInputs(context.Background(), prompts)
+	if err != nil {
+		fmt.Printf("OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
+	}
+
+	return err
 }
 
-func createPlanSystemMessage(requirementPath, outputDir string) []agents.TResponseInputItem {
+func buildPlanSystemMessage(requirementsPath, outputDir string) ([]agents.TResponseInputItem, error) {
+	data := struct {
+		RequirementsPath       string
+		SrsPath                string
+		StoriesPath            string
+		AcceptanceCriteriaPath string
+	}{
+		RequirementsPath:       requirementsPath,
+		SrsPath:                filepath.Join(outputDir, "srs.md"),
+		StoriesPath:            filepath.Join(outputDir, "stories.md"),
+		AcceptanceCriteriaPath: filepath.Join(outputDir, "acceptance_criteria.md"),
+	}
+
+	tmpl, err := template.New("plan").Parse(planPromptTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parse plan template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, fmt.Errorf("render plan template: %w", err)
+	}
+
 	return agents.InputList(
-		agents.SystemMessage(fmt.Sprintf("read requirement from %s", filepath.Join(requirementPath, "requirements.md"))),
-		agents.SystemMessage("You are a Solution Architect. Transform requirements into SRS, Stories (INVEST), and Acceptance Criteria. Ensure Use Cases, Interfaces, Constraints in SRS; INVEST in stories; and each story maps to AC."),
-		agents.SystemMessage("Please produce three markdown documents. No header or footer."),
-		agents.SystemMessage(fmt.Sprintf("เอา output มาสร้างไฟล์ %s/srs.md, %s/stories.md, %s/acceptance_criteria.md", outputDir, outputDir, outputDir)),
-	)
+		agents.SystemMessage(buf.String()),
+	), nil
 }
 
 func writeFileWithHeader(cfg *config.Config, sourcePath, outPath, body string) error {
