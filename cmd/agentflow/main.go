@@ -169,7 +169,7 @@ func designCmd(args []string) {
 	}); err != nil {
 		log.Fatalf("design failed: %v", err)
 	}
-	fmt.Printf("Wrote %s and %s\n", filepath.Join(*outputDir, "architecture.md"), filepath.Join(*outputDir, "uml.md"))
+	fmt.Printf("Wrote %s\n", filepath.Join(*outputDir, "architecture.md"))
 }
 
 func umlCmd(args []string) {
