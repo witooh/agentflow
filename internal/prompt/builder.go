@@ -8,7 +8,33 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/nlpodyssey/openai-agents-go/agents"
 )
+
+// getPromptFromFile reads the content of the given file path and returns it as a string.
+// If the file does not exist or cannot be read, it returns an error.
+func getPromptFromFile(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// GetPromptFromFiles reads the content of the given files and returns them as a slice of TResponseInputItem.
+// If the file does not exist or cannot be read, it returns an error.
+func GetPromptFromFiles(paths []string) ([]agents.TResponseInputItem, error) {
+	items := []agents.TResponseInputItem{}
+	for _, path := range paths {
+		prompt, err := getPromptFromFile(path)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, agents.UserMessage(path+"\n\n"+prompt))
+	}
+	return items, nil
+}
 
 type BuildOptions struct {
 	RoleTemplate string
@@ -16,27 +42,20 @@ type BuildOptions struct {
 	ExtraContext string
 }
 
-func BuildForRole(opts BuildOptions) (string, []string, error) {
-	files, err := readMarkdownFiles(opts.InputsDir)
+func ListInputFiles(inputsDir string) ([]string, error) {
+	files, err := readMarkdownFiles(inputsDir)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
-	var sections []string
-	for _, f := range files {
-		sections = append(sections, fmt.Sprintf("# File: %s\n\n%s", filepath.Base(f.Path), f.Content))
+	return filesToNames(files), nil
+}
+
+func GetInputFiles(dir string, filenames []string) ([]string, error) {
+	files := []fileData{}
+	for _, filename := range filenames {
+		files = append(files, fileData{Path: filepath.Join(dir, filename), Content: ""})
 	}
-	joined := strings.Join(sections, "\n\n---\n\n")
-	prompt := strings.TrimSpace(strings.Join([]string{
-		"SYSTEM:\n" + strings.TrimSpace(opts.RoleTemplate),
-		"CONTEXT:\n" + joined,
-		func() string {
-			if strings.TrimSpace(opts.ExtraContext) == "" {
-				return ""
-			}
-			return "EXTRA:\n" + strings.TrimSpace(opts.ExtraContext)
-		}(),
-	}, "\n\n"))
-	return prompt, filesToNames(files), nil
+	return filesToNames(files), nil
 }
 
 type fileData struct {

@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"agentflow/internal/agents/tools"
 	"context"
 	"fmt"
 
@@ -13,12 +14,15 @@ type Agent struct {
 	Agent *agents.Agent
 }
 
-func (a *Agent) Run(ctx context.Context, prompt string) (string, error) {
-	result, err := agents.Run(ctx, a.Agent, prompt)
+func (a *Agent) RunInputs(ctx context.Context, prompts []agents.TResponseInputItem) (string, error) {
+	// loop through prompts and print them
+	for _, prompt := range prompts {
+		fmt.Println(prompt.OfMessage.Content.OfString.String())
+	}
+	result, err := agents.RunInputs(ctx, a.Agent, prompts)
 	if err != nil {
 		return "", err
 	}
-	fmt.Println(result)
 	return fmt.Sprint(result.FinalOutput), nil
 }
 
@@ -41,8 +45,26 @@ func newAgent(role, instructions, model string) *Agent {
 		Agent: agents.New(role).
 			WithInstructions(instructions).
 			WithModel(model).
+			WithTools(
+				tools.FileCreatorTool,
+				tools.FileReaderTool,
+			).
 			WithModelSettings(modelsettings.ModelSettings{
 				Temperature: openai.Float(1.0),
 			}),
 	}
+}
+
+func UserMessage(message string) agents.TResponseInputItem {
+	return agents.UserMessage(message)
+}
+
+func InputList(items ...any) []agents.TResponseInputItem {
+	return agents.InputList(items...)
+}
+
+type TResponseInputItem = agents.TResponseInputItem
+
+func SystemMessage(message string) agents.TResponseInputItem {
+	return agents.SystemMessage(message)
 }

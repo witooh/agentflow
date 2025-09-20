@@ -39,78 +39,36 @@ func Plan(opts PlanOptions) error {
 		return err
 	}
 
-	reqPath := opts.Requirements
-	if strings.TrimSpace(reqPath) == "" {
-		reqPath = filepath.Join(cfg.IO.OutputDir, "requirements.md")
-	}
-	b, err := os.ReadFile(reqPath)
-	if err != nil {
-		return ErrNoRequirements
-	}
-	role := opts.Role
-	if role == "" {
-		role = "sa"
-	}
-	tpl := cfg.Roles[role]
-	if strings.TrimSpace(tpl) == "" {
-		tpl = "You are a Solution Architect. Transform requirements into SRS, Stories (INVEST), and Acceptance Criteria. Ensure Use Cases, Interfaces, Constraints in SRS; INVEST in stories; and each story maps to AC. Output markdown clearly separated with headings: --- SRS START ---, --- STORIES START ---, --- AC START ---"
-	}
+	prompts := createPlanSystemMessage(opts.Requirements, cfg.IO.OutputDir)
 
-	// Build prompt inline from requirements content to avoid scanning whole input dir.
-	prompt := strings.TrimSpace(strings.Join([]string{
-		"SYSTEM:\n" + strings.TrimSpace(tpl),
-		"CONTEXT:\n# File: requirements.md\n\n" + string(b),
-		"EXTRA:\nPlease produce three markdown documents. Delimit each section with exact markers on their own lines: \n--- SRS START ---\n...\n--- STORIES START ---\n...\n--- AC START ---\n...\nMake content concise and complete per acceptance criteria.",
-	}, "\n\n"))
-
-	var content string
-	var runID string
 	if opts.DryRun {
-		content = scaffoldPlanOutput(prompt)
+		return nil
 	} else {
-		resp, err := agents.SA.Run(context.Background(), prompt)
+		_, err := agents.SA.RunInputs(context.Background(), prompts)
 		if err != nil {
-			content = scaffoldPlanOutput(prompt) + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
-		} else {
-			// runID = resp.RunID
-			content = resp
+			fmt.Printf("OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		}
 	}
 
-	srs, stories, ac := splitPlanContent(content)
-	// Ensure minimal structures
-	srs = ensureSRS(srs)
-	stories = ensureStories(stories)
-	ac = ensureAC(ac)
-
-	date := time.Now().Format("2006-01-02")
-	// Add headers and write files
-	if err := writeFileWithHeader(cfg, role, runID, reqPath, filepath.Join(cfg.IO.OutputDir, "srs.md"),
-		"# AgentFlow — Software Requirements Specification (SRS)\n\n**Version:** "+cfg.SchemaVersion+"  \n**Date:** "+date+"\n\n"+srs); err != nil {
-		return err
-	}
-	if err := writeFileWithHeader(cfg, role, runID, reqPath, filepath.Join(cfg.IO.OutputDir, "stories.md"),
-		"# AgentFlow — User Stories (INVEST)\n\n**Date:** "+date+"\n\n"+stories); err != nil {
-		return err
-	}
-	if err := writeFileWithHeader(cfg, role, runID, reqPath, filepath.Join(cfg.IO.OutputDir, "acceptance_criteria.md"),
-		"# AgentFlow — Acceptance Criteria\n\n**Date:** "+date+"\n\n"+ac); err != nil {
-		return err
-	}
 	return nil
 }
 
-func writeFileWithHeader(cfg *config.Config, role, runID, sourcePath, outPath, body string) error {
+func createPlanSystemMessage(requirementPath, outputDir string) []agents.TResponseInputItem {
+	return agents.InputList(
+		agents.SystemMessage(fmt.Sprintf("read requirement from %s", filepath.Join(requirementPath, "requirements.md"))),
+		agents.SystemMessage("You are a Solution Architect. Transform requirements into SRS, Stories (INVEST), and Acceptance Criteria. Ensure Use Cases, Interfaces, Constraints in SRS; INVEST in stories; and each story maps to AC."),
+		agents.SystemMessage("Please produce three markdown documents. No header or footer."),
+		agents.SystemMessage(fmt.Sprintf("เอา output มาสร้างไฟล์ %s/srs.md, %s/stories.md, %s/acceptance_criteria.md", outputDir, outputDir, outputDir)),
+	)
+}
+
+func writeFileWithHeader(cfg *config.Config, sourcePath, outPath, body string) error {
 	var meta strings.Builder
 	meta.WriteString("<!-- Run Metadata\n")
 	meta.WriteString(fmt.Sprintf("Project: %s\n", cfg.ProjectName))
-	meta.WriteString(fmt.Sprintf("Role: %s\n", role))
 	meta.WriteString(fmt.Sprintf("Model: %s\n", cfg.LLM.Model))
 	meta.WriteString(fmt.Sprintf("Temperature: %.2f\n", cfg.LLM.Temperature))
 	meta.WriteString(fmt.Sprintf("MaxTokens: %d\n", cfg.LLM.MaxTokens))
-	if runID != "" {
-		meta.WriteString(fmt.Sprintf("RunID: %s\n", runID))
-	}
 	meta.WriteString(fmt.Sprintf("SourceRequirements: %s\n", sourcePath))
 	meta.WriteString(fmt.Sprintf("Timestamp: %s\n", time.Now().Format(time.RFC3339)))
 	meta.WriteString("-->\n\n")
@@ -127,20 +85,6 @@ func writeFileWithHeader(cfg *config.Config, role, runID, sourcePath, outPath, b
 		return err
 	}
 	return os.WriteFile(outPath, []byte(content), 0o644)
-}
-
-func scaffoldPlanOutput(prompt string) string {
-	return strings.Join([]string{
-		"--- SRS START ---",
-		"## 1. บทนำ\n- ...",
-		"## 3. Use Cases\n- UC-01 ...",
-		"## Interfaces\n- ...\n## Constraints\n- ...",
-		"--- STORIES START ---",
-		"## EPIC-1\n- STORY-1.1: ...\n  - AC: ...",
-		"--- AC START ---",
-		"## STORY-1.1\n- [ ] ...",
-		"\n<!-- Prompt Context (debug) -->\n```\n" + prompt + "\n```",
-	}, "\n\n")
 }
 
 func splitPlanContent(s string) (string, string, string) {

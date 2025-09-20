@@ -3,13 +3,13 @@ package commands
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"agentflow/internal/agents"
 	"agentflow/internal/config"
+	"agentflow/internal/prompt"
 )
 
 type QAOptions struct {
@@ -42,41 +42,27 @@ func QA(opts QAOptions) error {
 		sourceDir = cfg.IO.OutputDir
 	}
 
-	// Gather context files if present
-	var ctxParts []string
-	for _, name := range []string{"srs.md", "stories.md", "acceptance_criteria.md", "requirements.md"} {
-		p := filepath.Join(sourceDir, name)
-		if b, err := os.ReadFile(p); err == nil {
-			ctxParts = append(ctxParts, fmt.Sprintf("# File: %s\n\n%s", name, string(b)))
-		}
+	files, err := prompt.GetInputFiles(sourceDir, []string{"srs.md", "stories.md", "acceptance_criteria.md", "requirements.md"})
+	if err != nil {
+		return err
 	}
-	ctxContent := strings.TrimSpace(strings.Join(ctxParts, "\n\n"))
-
-	role := strings.TrimSpace(opts.Role)
-	if role == "" {
-		role = "qa"
+	systemMessages, err := prompt.GetPromptFromFiles(files)
+	if err != nil {
+		return err
 	}
-	tpl := cfg.Roles[role]
-	if strings.TrimSpace(tpl) == "" {
-		tpl = "You are a QA Lead. Produce a concise but thorough test plan that aligns to the SRS and Acceptance Criteria."
-	}
-
-	prompt := strings.TrimSpace(strings.Join([]string{
-		"SYSTEM:\n" + strings.TrimSpace(tpl),
-		"CONTEXT:\n" + ctxContent,
-		"EXTRA:\nProduce one markdown document delimited by the exact marker on its own line:\n--- TESTPLAN START ---\n...\nThe test plan must include at minimum these sections as markdown headings: 1) Test Strategy, 2) Scope, 3) Test Types (unit/integration/e2e), 4) Mapping to Acceptance Criteria, 5) Test Environments & Data, 6) Entry/Exit Criteria, 7) Risks & Mitigations, 8) Execution Plan & Responsibilities. Keep it practical and actionable.",
+	userMessage := agents.UserMessage(strings.Join([]string{
+		"You are a QA Lead. Produce a concise but thorough test plan that aligns to the SRS and Acceptance Criteria.",
 	}, "\n\n"))
+	prompts := agents.InputList(systemMessages, userMessage)
 
 	var content string
-	var runID string
 	if opts.DryRun {
-		content = scaffoldQATestPlan()
+		content = ""
 	} else {
-		resp, err := agents.LQ.Run(context.Background(), prompt)
+		resp, err := agents.LQ.RunInputs(context.Background(), prompts)
 		if err != nil {
-			content = scaffoldQATestPlan() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
+			content = fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		} else {
-			// runID = resp.RunID
 			content = resp
 		}
 	}
@@ -90,24 +76,10 @@ func QA(opts QAOptions) error {
 	// Source path string for metadata
 	sourcePath := filepath.Join(sourceDir, "{srs,stories,ac}")
 	outPath := filepath.Join(cfg.IO.OutputDir, "test-plan.md")
-	if err := writeFileWithHeader(cfg, role, runID, sourcePath, outPath, body); err != nil {
+	if err := writeFileWithHeader(cfg, sourcePath, outPath, body); err != nil {
 		return err
 	}
 	return nil
-}
-
-func scaffoldQATestPlan() string {
-	return strings.Join([]string{
-		"--- TESTPLAN START ---",
-		"## Test Strategy\nProvide overall test approach emphasizing risk-based testing and alignment with business goals.",
-		"## Scope\nIn-scope and out-of-scope areas.",
-		"## Test Types\n- Unit\n- Integration\n- End-to-End\n- Non-functional (Performance, Security, Usability)",
-		"## Mapping to Acceptance Criteria\nFor each AC, outline test ideas or scenarios.",
-		"## Test Environments & Data\nDescribe environments, dependencies, seed data, and data management.",
-		"## Entry/Exit Criteria\nDefine readiness and completion criteria.",
-		"## Risks & Mitigations\nIdentify key risks and how to mitigate them.",
-		"## Execution Plan & Responsibilities\nWho does what, when, with tooling and reporting cadence.",
-	}, "\n\n")
 }
 
 func extractTestPlan(s string) string {

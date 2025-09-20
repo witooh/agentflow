@@ -33,6 +33,8 @@ func main() {
 		planCmd(os.Args[2:])
 	case "design":
 		designCmd(os.Args[2:])
+	case "uml":
+		umlCmd(os.Args[2:])
 	case "qa":
 		qaCmd(os.Args[2:])
 	case "devplan":
@@ -56,6 +58,7 @@ Commands:
   intake      Aggregate input and generate requirements.md
   plan        Generate srs.md, stories.md, and acceptance_criteria.md from requirements.md
   design      Generate architecture.md and uml.md from prior docs
+  uml         Generate uml.md from requirements/srs/stories using uml template
   qa          Generate test-plan.md from prior docs
   devplan     Generate task list and per-task context
   help        Show this help
@@ -167,6 +170,27 @@ func designCmd(args []string) {
 		log.Fatalf("design failed: %v", err)
 	}
 	fmt.Printf("Wrote %s and %s\n", filepath.Join(*outputDir, "architecture.md"), filepath.Join(*outputDir, "uml.md"))
+}
+
+func umlCmd(args []string) {
+	fs := flag.NewFlagSet("uml", flag.ExitOnError)
+	configPath := fs.String("config", ".agentflow/config.json", "Path to config file")
+	sourceDir := fs.String("source", ".agentflow/output", "Directory with prior docs (requirements/srs/stories)")
+	outputDir := fs.String("output", ".agentflow/output", "Output directory")
+	role := fs.String("role", "sa", "Role to use for uml (sa)")
+	dryRun := fs.Bool("dry-run", false, "Do not call OpenAI, just scaffold output")
+	_ = fs.Parse(args)
+
+	if err := commands.Uml(commands.UmlOptions{
+		ConfigPath: *configPath,
+		SourceDir:  *sourceDir,
+		OutputDir:  *outputDir,
+		Role:       *role,
+		DryRun:     *dryRun,
+	}); err != nil {
+		log.Fatalf("uml failed: %v", err)
+	}
+	fmt.Printf("Wrote %s\n", filepath.Join(*outputDir, "uml.md"))
 }
 
 func devplanCmd(args []string) {

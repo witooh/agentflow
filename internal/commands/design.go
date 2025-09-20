@@ -3,10 +3,8 @@ package commands
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"agentflow/internal/agents"
 	"agentflow/internal/config"
@@ -36,76 +34,73 @@ func Design(opts DesignOptions) error {
 		return err
 	}
 
-	sourceDir := opts.SourceDir
-	if strings.TrimSpace(sourceDir) == "" {
-		sourceDir = cfg.IO.OutputDir
-	}
+	systemMessages := createDesignSystemMessage(opts.SourceDir)
 
-	// Gather context files if present
-	var ctxParts []string
-	for _, name := range []string{"requirements.md", "srs.md", "stories.md", "acceptance_criteria.md"} {
-		p := filepath.Join(sourceDir, name)
-		if b, err := os.ReadFile(p); err == nil {
-			ctxParts = append(ctxParts, fmt.Sprintf("# File: %s\n\n%s", name, string(b)))
-		}
-	}
-	ctxContent := strings.TrimSpace(strings.Join(ctxParts, "\n\n"))
-
-	role := opts.Role
-	if role == "" {
-		role = "sa"
-	}
-	tpl := cfg.Roles[role]
-	if strings.TrimSpace(tpl) == "" {
-		tpl = "You are a Solution Architect. Produce an architecture overview with a Project Structure section and PlantUML component and deployment diagrams, and a separate UML document with sequence, class, and activity diagrams."
-	}
-
-	prompt := strings.TrimSpace(strings.Join([]string{
-		"SYSTEM:\n" + strings.TrimSpace(tpl),
-		"CONTEXT:\n" + ctxContent,
-		"EXTRA:\nProduce two markdown documents. Delimit each with exact markers on their own lines:\n--- ARCH START ---\n...\n--- UML START ---\n...\nMake sure architecture.md contains a '## Project Structure' section and PlantUML component/deployment diagrams using ```plantuml fences. UML doc must include at least sequence, class, and activity diagrams using ```plantuml fences.",
-	}, "\n\n"))
-
-	var content string
-	var runID string
 	if opts.DryRun {
-		content = scaffoldDesignOutput()
+		return nil
 	} else {
-		resp, err := agents.SA.Run(context.Background(), prompt)
+		_, err := agents.SA.RunInputs(context.Background(), systemMessages)
 		if err != nil {
-			content = scaffoldDesignOutput() + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
-		} else {
-			// runID = resp.RunID
-			content = resp
+			fmt.Printf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		}
 	}
 
-	arch, uml := splitDesignContent(content)
-	arch = ensureArchitecture(arch)
-	uml = ensureUML(uml)
-
-	date := time.Now().Format("2006-01-02")
-	archBody := "# AgentFlow — Architecture\n\n**Date:** " + date + "\n\n" + arch
-	umlBody := "# AgentFlow — UML\n\n**Date:** " + date + "\n\n" + uml
-
-	// Source path string for metadata
-	sourcePath := filepath.Join(sourceDir, "{srs,stories,ac}")
-	if err := writeFileWithHeader(cfg, role, runID, sourcePath, filepath.Join(cfg.IO.OutputDir, "architecture.md"), archBody); err != nil {
-		return err
-	}
-	if err := writeFileWithHeader(cfg, role, runID, sourcePath, filepath.Join(cfg.IO.OutputDir, "uml.md"), umlBody); err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
-func scaffoldDesignOutput() string {
-	return strings.Join([]string{
-		"--- ARCH START ---",
-		defaultArchitectureSection(),
-		"--- UML START ---",
-		defaultUMLSection(),
-	}, "\n")
+func createDesignSystemMessage(outputDir string) []agents.TResponseInputItem {
+	return agents.InputList(
+		agents.SystemMessage(fmt.Sprintf(`คุณคือ Solution Architect ที่ออกแบบสถาปัตยกรรมระบบและโครงสร้างโปรเจกต์โดยอ้างอิงจากไฟล์ต่อไปนี้ หากเข้าถึงไม่ได้ให้ทำงานแบบสมมติฐานที่ระบุชัดเจน
+%s
+%s
+%s
+
+วัตถุประสงค์
+1 ออกแบบ Infrastructure Architecture และ Project File Structure
+2 สร้างเอกสาร Markdown ที่มี Mermaid diagrams ตามกติกา GitHub Mermaid
+3 บันทึกไฟล์ผลลัพธ์ไว้ที่ .agentflow/output/architecture.md
+
+ข้อกำหนดเอาต์พุต
+เอกสารเป็น Markdown เท่านั้น ห้ามมี header หรือ footer ที่ไม่จำเป็น
+โค้ด Mermaid ต้อง ไม่ใช้อักขระ ( หรือ ) และต้องเป็นไวยากรณ์ที่ GitHub Mermaid รองรับ เช่น flowchart TD หรือ LR, subgraph, [] สำหรับ node
+แยก diagram อย่างน้อย 2 ส่วน
+Infrastructure Diagram
+Project File Structure Diagram
+
+เพิ่มส่วน Assumptions, Rationale, Security and Observability, CI CD overview แบบย่อใน Markdown ธรรมดา
+
+ขั้นตอนการทำงาน
+1 พยายามอ่านไฟล์อินพุตที่กำหนด หากอ่านไม่ได้ ให้ระบุในเอกสารส่วน “Assumptions” ว่าใช้สมมติฐานมาตรฐาน production แทน
+2 สกัด requirement หลัก NFRs ถ้ามี เช่น throughput latency RTO RPO data residency budget หากไม่พบให้กำหนดค่าเริ่มต้นที่เหมาะสมและระบุเหตุผล
+3 ออกแบบ Infrastructure ด้วย Mermaid ให้สอดคล้องกับข้อกำหนด เช่น cloud ที่ระบุ ถ้าไม่ระบุให้ใช้ AWS เป็นดีฟอลต์ พร้อมส่วนประกอบมาตรฐาน VPC subnets ALB compute service datastore cache object storage queue CDN WAF IAM secrets monitoring logging tracing และ CI CD
+4 ออกแบบ Project structure ด้วย markdown ให้รองรับ backend และ frontend แยกกัน พร้อม infra tests automation และ configs ชัดเจน
+
+เขียนผลลัพธ์ไปที่ %s เท่านั้น
+
+เกณฑ์คุณภาพ
+
+สั้น ชัด มีเหตุผลกำกับแต่ละกลุ่มบริการ
+ปลอดภัยตามหลัก least privilege และมีการสังเกตการณ์ครบถ้วน
+โค้ด Mermaid แสดงผลได้จริงใน GitHub
+หากมีข้อจำกัดหรือสมมติฐาน ให้บอกอย่างโปร่งใสในส่วน Assumptions
+รูปแบบไฟล์ผลลัพธ์
+Markdown ล้วน มีส่วนย่อยต่อไปนี้เรียงลำดับ
+Assumptions
+Infrastructure overview and rationale
+mermaid flowchart for infrastructure
+CI CD overview เลือกใช้ flowchart อีกบล็อกได้
+Project file structure for tree
+Security and observability checklist
+ห้ามทำสิ่งต่อไปนี้
+ห้ามเขียนเนื้อหาใดๆ นอกเหนือไฟล์เป้าหมาย
+ห้ามใส่วงเล็บในโค้ด Mermaid
+ห้ามเปิดเผยคีย์หรือความลับใดๆ ในตัวอย่าง`,
+			filepath.Join(outputDir, "requirements.md."),
+			filepath.Join(outputDir, "srs.md"),
+			filepath.Join(outputDir, "stories.md"),
+			filepath.Join(outputDir, "architecture.md"),
+		)),
+	)
 }
 
 func splitDesignContent(s string) (string, string) {
@@ -139,26 +134,12 @@ func splitDesignContent(s string) (string, string) {
 
 func ensureArchitecture(s string) string {
 	s = strings.TrimSpace(s)
-	if s == "" {
-		return defaultArchitectureSection()
-	}
 	// Ensure Project Structure section exists
-	lower := strings.ToLower(s)
-	if !strings.Contains(lower, "project structure") {
-		s = s + "\n\n" + projectStructureSection()
-	}
-	// Ensure at least one PlantUML fence exists for component/deployment
-	if !strings.Contains(lower, "plantuml") {
-		s = s + "\n\n" + plantUMLComponentDeployment()
-	}
 	return s
 }
 
 func ensureUML(s string) string {
 	s = strings.TrimSpace(s)
-	if s == "" {
-		return defaultUMLSection()
-	}
 	lower := strings.ToLower(s)
 	needSeq := !strings.Contains(lower, "sequence")
 	needClass := !strings.Contains(lower, "class")
@@ -167,126 +148,7 @@ func ensureUML(s string) string {
 		var b strings.Builder
 		b.WriteString(s)
 		b.WriteString("\n\n")
-		if needSeq {
-			b.WriteString(sampleSequence())
-			b.WriteString("\n\n")
-		}
-		if needClass {
-			b.WriteString(sampleClass())
-			b.WriteString("\n\n")
-		}
-		if needAct {
-			b.WriteString(sampleActivity())
-		}
 		s = b.String()
 	}
 	return s
-}
-
-func defaultArchitectureSection() string {
-	return strings.Join([]string{
-		"## Overview",
-		"CLI (Go) ↔ LangGraph (REST) ↔ LLM Provider. Documents are written under output/ by default.",
-		projectStructureSection(),
-		plantUMLComponentDeployment(),
-	}, "\n\n")
-}
-
-func projectStructureSection() string {
-	return "## Project Structure\n\n" + "```text\n" + strings.TrimSpace(projectStructureTree()) + "\n```"
-}
-
-func plantUMLComponentDeployment() string {
-	return strings.Join([]string{
-		"### Component Diagram",
-		"```plantuml",
-		"@startuml",
-		"package AgentFlow {",
-		"  [CLI] --> (LangGraph API)",
-		"}",
-		"(LangGraph API) --> (LLM Provider)",
-		"@enduml",
-		"```",
-		"",
-		"### Deployment Diagram",
-		"```plantuml",
-		"@startuml",
-		"node DevMachine {",
-		"  artifact agentflow.exe",
-		"}",
-		"node DockerHost {",
-		"  node LangGraph {",
-		"    artifact fastapi",
-		"  }",
-		"}",
-		"agentflow.exe --> fastapi",
-		"@enduml",
-		"```",
-	}, "\n")
-}
-
-func defaultUMLSection() string {
-	return strings.Join([]string{
-		sampleSequence(),
-		sampleClass(),
-		sampleActivity(),
-	}, "\n\n")
-}
-
-func sampleSequence() string {
-	return strings.Join([]string{
-		"## Sequence: Intake",
-		"```plantuml",
-		"@startuml",
-		"actor Dev",
-		"Dev -> CLI: intake --dry-run",
-		"CLI -> LangGraph: POST /agents/run",
-		"LangGraph --> CLI: content",
-		"@enduml",
-		"```",
-	}, "\n")
-}
-
-func sampleClass() string {
-	return strings.Join([]string{
-		"## Class: Core",
-		"```plantuml",
-		"@startuml",
-		"class Config {\n  +ProjectName\n  +LLM\n}",
-		"class Client {\n  +RunAgent()\n}",
-		"Config <.. Client",
-		"@enduml",
-		"```",
-	}, "\n")
-}
-
-func sampleActivity() string {
-	return strings.Join([]string{
-		"## Activity: DevPlan",
-		"```plantuml",
-		"@startuml",
-		"start",
-		":Read docs;",
-		":Generate tasks;",
-		"stop",
-		"@enduml",
-		"```",
-	}, "\n")
-}
-
-// projectStructureTree returns a static tree suitable for docs; keep deterministic
-func projectStructureTree() string {
-	lines := []string{
-		".",
-		"├── cmd/agentflow",
-		"├── internal/commands",
-		"├── internal/config",
-		"├── internal/langgraph",
-		"├── internal/prompt",
-		"├── docs",
-		"│   └── tasks",
-		"├── langgraph/server",
-		"└── scripts",
-	}
-	return strings.Join(lines, "\n")
 }

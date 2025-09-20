@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -44,93 +42,93 @@ func Intake(opts IntakeOptions) error {
 		return err
 	}
 
-	role := opts.Role
-	if role == "" {
-		role = "po_pm"
-	}
-	tpl := cfg.Roles[role]
-	if strings.TrimSpace(tpl) == "" {
-		// fallback
-		tpl = "You are a PO/PM. Convert input context into formal requirements."
-	}
-
-	// Build a timeline summary from dated input files for context and guaranteed output sections
-	timeline, _, terr := prompt.BuildTimelineSummary(cfg.IO.InputDir)
-	if terr != nil {
-		// non-fatal; continue without timeline
-		timeline = ""
-	}
-
-	p, files, err := prompt.BuildForRole(prompt.BuildOptions{
-		RoleTemplate: tpl,
-		InputsDir:    cfg.IO.InputDir,
-		ExtraContext: "Please produce markdown with sections: Goals, Scope, FR, NFR, Assumptions, Constraints, Timeline Summary, Questions to Human. Use the TIMELINE SUMMARY to narrate idea evolution chronologically.\n\nTIMELINE SUMMARY (derived from filenames):\n" + timeline,
-	})
+	files, err := prompt.ListInputFiles(cfg.IO.InputDir)
 	if err != nil {
 		return err
 	}
+	userPrompts, err := prompt.GetPromptFromFiles(files)
+	if err != nil {
+		return err
+	}
+	systemMessage := createIntakeSystemMessage(cfg.IO.OutputDir)
+	prompts := agents.InputList(userPrompts, systemMessage)
 
-	var baseContent string
-	var runID string
 	if len(files) == 0 {
-		// still proceed but signal no inputs
-		baseContent = "_No inputs found. This is a scaffold file._\n" + scaffoldRequirements(p, timeline)
+		return ErrNoInputs
 	} else if opts.DryRun {
-		baseContent = scaffoldRequirements(p, timeline)
+		return nil
 	} else {
-		resp, err := agents.PO.Run(context.Background(), p) // log prompt via agent
+		_, err := agents.PO.RunInputs(context.Background(), prompts)
 		if err != nil {
-			// Fallback to scaffold on error
-			baseContent = scaffoldRequirements(p, timeline) + fmt.Sprintf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
-		} else {
-			// runID = resp.RunID
-			// baseContent = ensureRequirementsSections(resp, timeline)
-			baseContent = resp
+			fmt.Printf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
 		}
 	}
 
-	final := withMetadataHeader(cfg, role, files, runID, baseContent)
-	if err := writeRequirements(cfg.IO.OutputDir, final); err != nil {
-		return err
-	}
-	if len(files) == 0 {
-		return ErrNoInputs
-	}
 	return nil
 }
 
-func writeRequirements(outputDir string, content string) error {
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return err
-	}
-	path := filepath.Join(outputDir, "requirements.md")
-	return os.WriteFile(path, []byte(content), 0o644)
-}
+func createIntakeSystemMessage(path string) []agents.TResponseInputItem {
+	systemMessage := agents.SystemMessage(`### 🎯 Output format (Markdown)
 
-func scaffoldRequirements(p string, timeline string) string {
-	parts := []string{
-		"# requirements",
-		fmt.Sprintf("> Generated at %s (scaffold)\n", time.Now().Format(time.RFC3339)),
-		"## Goals\n\n- ...",
-		"## Scope\n\n- ...",
-		"## Functional Requirements (FR)\n\n- ...",
-		"## Non-Functional Requirements (NFR)\n\n- ...",
-		"## Assumptions\n\n- ...",
-		"## Constraints\n\n- ...",
-		"## Timeline Summary\n\n" + strings.TrimSpace(timeline),
-		"\n## Open Questions\n\n- ...",
-		"\n## Questions to Human\n\n- ...",
-		"\n<!-- Prompt Context (debug) -->\n",
-		"```\n" + p + "\n```\n",
-	}
-	return strings.Join(parts, "\n")
+- **Business Goals & Success KPIs**  
+  - Describe business drivers (compliance, UX, marketing agility, cost savings).  
+  - Define measurable KPIs (e.g., opt-in rate target, consent sync SLA, regulator reporting turnaround).  
+
+- **User Personas & Journeys**  
+  - Customer (mobile/web) → manage consent, banner UX.  
+  - Marketing/Analytics team → use dashboard, reporting.  
+  - Regulator/Audit → compliance log, proof of consent.  
+  - Backend/System Integrator → consume consent via API/SDK.  
+
+- **Scope (MVP vs Future Phases)**  
+  - Clearly separate **MVP features** vs **future expansion**.  
+  - Use MoSCoW or phased roadmap (MVP → Phase 2 → Mature state).  
+
+- **Functional Requirements (FR)**  
+  - Detail user-facing and system-facing capabilities.  
+  - Link each FR back to persona & business goal.  
+
+- **Non-Functional Requirements (NFR)**  
+  - Scale, latency, retention, compliance, UX accessibility, availability.  
+  - Prioritize what is critical at MVP vs later.  
+
+- **Dependencies & Risks**  
+  - Dependencies on other teams (e.g., Data Lake, Security, Compliance).  
+  - Risks (regulatory, adoption, tech feasibility).  
+
+- **Constraints**  
+  - Jurisdiction: Thailand only (PDPA).  
+  - Data residency: PDPA compliant.  
+  - Migration: cutover from OneTrust (big bang).  
+  - Certifications: not required at MVP.  
+
+- **Deliverables to Solution Architect (SA)**  
+  - Consent use cases & flows (opt-in, revoke, merge, reporting).  
+  - High-level data model (consent record, audit log, mapping to customer/device).  
+  - Integration points (mobile, web, backend, data lake).  
+  - Prioritized features (MVP vs future).  
+  - Reporting requirements (dimensions, regulator templates).  
+
+- **Timeline Summary (Product Roadmap)**  
+  - Narrate evolution chronologically:  
+    - MVP (core consent, banner, reporting baseline).  
+    - Phase 2 (advanced analytics, audience targeting, cookie discovery).  
+    - Future (scalability, certifications, multi-region compliance).  
+
+- **Questions to Human (Stakeholders)**  
+  - Business-side clarifications (regulator reporting expectation, marketing KPIs, branding rules).  
+  - Technical-side clarifications (DB choice, API standards, realtime infra).  
+`)
+
+	writeFileMessage := agents.SystemMessage(fmt.Sprintf("เอา output มาสร้างไฟล์ %s/requirements.md", path))
+	return agents.InputList(systemMessage, writeFileMessage)
 }
 
 func ensureRequirementsSections(s string) string {
 	return strings.TrimSpace(s)
 }
 
-func withMetadataHeader(cfg *config.Config, role string, files []string, runID string, body string) string {
+func withMetadataHeader(cfg *config.Config, files []string, body string) string {
 	date := time.Now().Format("2006-01-02")
 	header := strings.Builder{}
 	header.WriteString("# AgentFlow — Requirements\n\n")
@@ -148,13 +146,9 @@ func withMetadataHeader(cfg *config.Config, role string, files []string, runID s
 	// Run metadata (comment block)
 	header.WriteString("<!-- Run Metadata\n")
 	header.WriteString(fmt.Sprintf("Project: %s\n", cfg.ProjectName))
-	header.WriteString(fmt.Sprintf("Role: %s\n", role))
 	header.WriteString(fmt.Sprintf("Model: %s\n", cfg.LLM.Model))
 	header.WriteString(fmt.Sprintf("Temperature: %.2f\n", cfg.LLM.Temperature))
 	header.WriteString(fmt.Sprintf("MaxTokens: %d\n", cfg.LLM.MaxTokens))
-	if runID != "" {
-		header.WriteString(fmt.Sprintf("RunID: %s\n", runID))
-	}
 	header.WriteString(fmt.Sprintf("Timestamp: %s\n", time.Now().Format(time.RFC3339)))
 	if len(files) > 0 {
 		header.WriteString("Inputs:\n")
