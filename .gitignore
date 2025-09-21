@@ -10,7 +10,6 @@ agentflow
 # IDE settings
 .vscode/
 .idea/
-.junie/
 
 # OS-specific files
 .DS_Store
