@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -49,12 +50,17 @@ func Design(opts DesignOptions) error {
 	}
 
 	if opts.DryRun {
-		return nil
+		// In dry run mode, write scaffold files without making API calls
+		return writeDesignScaffold(cfg.IO.OutputDir)
 	}
 
 	_, err = agents.SA.RunInputs(context.Background(), systemMessages)
 	if err != nil {
 		fmt.Printf("\n\n> Note: OpenAI call failed, wrote scaffold instead. Error: %v\n", err)
+		// Write scaffold as fallback
+		if scaffoldErr := writeDesignScaffold(cfg.IO.OutputDir); scaffoldErr != nil {
+			return fmt.Errorf("API call failed and scaffold write failed: %v (original: %v)", scaffoldErr, err)
+		}
 	}
 
 	return err
@@ -118,21 +124,98 @@ func splitDesignContent(s string) (string, string) {
 
 func ensureArchitecture(s string) string {
 	s = strings.TrimSpace(s)
-	// Ensure Project Structure section exists
+	if s == "" {
+		// Provide fallback content when empty
+		return `# Architecture
+
+## Project Structure
+
+This section describes the overall project structure and organization.
+
+## Components
+
+Key components and their relationships.
+
+## PlantUML Diagrams
+
+` + "```plantuml\n@startuml\n!theme plain\ntitle System Architecture\n@enduml\n```"
+	}
+
+	lower := strings.ToLower(s)
+	var additions []string
+
+	// Check if Project Structure section exists
+	if !strings.Contains(lower, "project structure") {
+		additions = append(additions, "\n## Project Structure\n\nThis section describes the overall project structure and organization.")
+	}
+
+	// Check if PlantUML section exists
+	if !strings.Contains(lower, "plantuml") {
+		additions = append(additions, "\n## PlantUML Diagrams\n\n```plantuml\n@startuml\n!theme plain\ntitle System Architecture\n@enduml\n```")
+	}
+
+	if len(additions) > 0 {
+		return s + strings.Join(additions, "")
+	}
+
 	return s
 }
 
 func ensureUML(s string) string {
 	s = strings.TrimSpace(s)
-	lower := strings.ToLower(s)
-	needSeq := !strings.Contains(lower, "sequence")
-	needClass := !strings.Contains(lower, "class")
-	needAct := !strings.Contains(lower, "activity")
-	if needSeq || needClass || needAct {
-		var b strings.Builder
-		b.WriteString(s)
-		b.WriteString("\n\n")
-		s = b.String()
+	if s == "" {
+		// Provide fallback content when empty
+		return `# UML Diagrams
+
+## Sequence: User Interactions
+
+` + "```plantuml\n@startuml\nactor User\nUser -> System: Request\nSystem -> User: Response\n@enduml\n```" + `
+
+## Class: Domain Models
+
+` + "```plantuml\n@startuml\nclass Entity {\n  +id: string\n  +method()\n}\n@enduml\n```" + `
+
+## Activity: Process Flow
+
+` + "```plantuml\n@startuml\nstart\n:Process Request;\n:Generate Response;\nstop\n@enduml\n```"
 	}
+
+	lower := strings.ToLower(s)
+	var additions []string
+
+	// Check for required diagram types
+	if !strings.Contains(lower, "sequence") {
+		additions = append(additions, "\n## Sequence: User Interactions\n\n```plantuml\n@startuml\nactor User\nUser -> System: Request\nSystem -> User: Response\n@enduml\n```")
+	}
+
+	if !strings.Contains(lower, "class") {
+		additions = append(additions, "\n## Class: Domain Models\n\n```plantuml\n@startuml\nclass Entity {\n  +id: string\n  +method()\n}\n@enduml\n```")
+	}
+
+	if !strings.Contains(lower, "activity") {
+		additions = append(additions, "\n## Activity: Process Flow\n\n```plantuml\n@startuml\nstart\n:Process Request;\n:Generate Response;\nstop\n@enduml\n```")
+	}
+
+	if len(additions) > 0 {
+		return s + strings.Join(additions, "")
+	}
+
 	return s
+}
+func writeDesignScaffold(outputDir string) error {
+	// Write architecture.md with scaffold content
+	archContent := ensureArchitecture("")
+	archPath := filepath.Join(outputDir, "architecture.md")
+	if err := os.WriteFile(archPath, []byte(archContent), 0644); err != nil {
+		return fmt.Errorf("write architecture.md: %w", err)
+	}
+
+	// Write uml.md with scaffold content
+	umlContent := ensureUML("")
+	umlPath := filepath.Join(outputDir, "uml.md")
+	if err := os.WriteFile(umlPath, []byte(umlContent), 0644); err != nil {
+		return fmt.Errorf("write uml.md: %w", err)
+	}
+
+	return nil
 }
