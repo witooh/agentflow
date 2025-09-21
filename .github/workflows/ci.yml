@@ -55,12 +55,20 @@ jobs:
           ./scripts/build_cli.sh --current
           mkdir -p artifacts
           cp dist/agentflow artifacts/agentflow-macos
+          # Validate the binary was built successfully
+          if [ ! -f "artifacts/agentflow-macos" ]; then
+            echo "Error: agentflow binary not found after build"
+            exit 1
+          fi
+          # Show binary info for verification
+          file artifacts/agentflow-macos
+          ls -la artifacts/agentflow-macos
         shell: bash
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: agentflow-macos
+          name: agentflow-${{ github.ref_name || 'latest' }}-macos
           path: artifacts/agentflow-macos
           if-no-files-found: error
 
@@ -93,14 +101,29 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: agentflow-macos
+          name: agentflow-${{ github.ref_name }}-macos
           path: artifacts
           merge-multiple: false
+
+      - name: Validate downloaded artifacts
+        run: |
+          if [ ! -f "artifacts/agentflow-macos" ]; then
+            echo "Error: agentflow-macos binary not found in downloaded artifacts"
+            echo "Available files:"
+            find artifacts -type f -exec ls -la {} \;
+            exit 1
+          fi
+          echo "Binary validation successful:"
+          file artifacts/agentflow-macos
+          ls -la artifacts/agentflow-macos
+        shell: bash
 
       - name: Prepare release assets
         run: |
           mkdir -p release
-          find artifacts -maxdepth 5 -type f -exec cp {} release/ \;
+          cp artifacts/agentflow-macos release/agentflow-${{ github.ref_name }}-macos
+          echo "Release assets prepared:"
+          ls -la release/
         shell: bash
 
       - name: Create GitHub release
@@ -108,5 +131,5 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Agentflow ${{ github.ref_name }}
-          files: release/*
+          files: release/agentflow-${{ github.ref_name }}-macos
           generate_release_notes: true
