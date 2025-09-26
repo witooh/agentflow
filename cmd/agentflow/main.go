@@ -39,6 +39,10 @@ func main() {
 		qaCmd(os.Args[2:])
 	case "devplan":
 		devplanCmd(os.Args[2:])
+	case "entity":
+		entityCmd(os.Args[2:])
+	case "repo":
+		repoCmd(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
 		usage()
@@ -61,6 +65,8 @@ Commands:
   uml         Generate uml.md from requirements/srs/stories using uml template
   qa          Generate test-plan.md from prior docs
   devplan     Generate task list and per-task context
+  entity      Generate entities.md with data models and relationships
+  repo        Generate repository.md with Golang repository interfaces
   help        Show this help
   version     Show version
 
@@ -212,4 +218,46 @@ func devplanCmd(args []string) {
 		log.Fatalf("devplan failed: %v", err)
 	}
 	fmt.Printf("Wrote %s and %s/*.md\n", filepath.Join(*outputDir, "task_list.md"), filepath.Join(*outputDir, "tasks"))
+}
+
+func entityCmd(args []string) {
+	fs := flag.NewFlagSet("entity", flag.ExitOnError)
+	configPath := fs.String("config", ".agentflow/config.json", "Path to config file")
+	sourceDir := fs.String("source", ".agentflow/output", "Directory with prior docs (requirements/srs/stories/architecture)")
+	outputDir := fs.String("output", ".agentflow/output", "Output directory")
+	role := fs.String("role", "sa", "Role to use for entity design (sa)")
+	dryRun := fs.Bool("dry-run", false, "Do not call OpenAI, just scaffold output")
+	_ = fs.Parse(args)
+
+	if err := commands.Entity(commands.EntityOptions{
+		ConfigPath: *configPath,
+		SourceDir:  *sourceDir,
+		OutputDir:  *outputDir,
+		Role:       *role,
+		DryRun:     *dryRun,
+	}); err != nil {
+		log.Fatalf("entity failed: %v", err)
+	}
+	fmt.Printf("Wrote %s\n", filepath.Join(*outputDir, "entities.md"))
+}
+
+func repoCmd(args []string) {
+	fs := flag.NewFlagSet("repo", flag.ExitOnError)
+	configPath := fs.String("config", ".agentflow/config.json", "Path to config file")
+	sourceDir := fs.String("source", ".agentflow/output", "Directory with prior docs (requirements/srs/stories/architecture/entities)")
+	outputDir := fs.String("output", ".agentflow/output", "Output directory")
+	role := fs.String("role", "sa", "Role to use for repository design (sa)")
+	dryRun := fs.Bool("dry-run", false, "Do not call OpenAI, just scaffold output")
+	_ = fs.Parse(args)
+
+	if err := commands.Repo(commands.RepoOptions{
+		ConfigPath: *configPath,
+		SourceDir:  *sourceDir,
+		OutputDir:  *outputDir,
+		Role:       *role,
+		DryRun:     *dryRun,
+	}); err != nil {
+		log.Fatalf("repo failed: %v", err)
+	}
+	fmt.Printf("Wrote %s\n", filepath.Join(*outputDir, "repository.md"))
 }
